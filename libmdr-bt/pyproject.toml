@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "libmdr-bt"
+version = "0.1.0"
+description = "Python binding for libmdr-bt (Sony headphones platform connection backend)"
+readme = { text = "ctypes bindings for libmdr-bt (mdr-bt-shared).", content-type = "text/plain" }
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["libmdr"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+libmdr_bt = ["_native/*"]

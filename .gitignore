@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Built native libraries (generated into src/<pkg>/_native by cmake_build.py)
+**/_native/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

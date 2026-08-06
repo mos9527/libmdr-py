@@ -1,0 +1,11 @@
+libmdr Python Bindings
+===
+
+Installation
+---
+pip install -e libmdr
+pip install -e libmdr-bt
+
+Running the Example
+---
+python -m examples.tui

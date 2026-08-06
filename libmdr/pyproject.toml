@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "libmdr"
+version = "0.1.0"
+description = "Python bindings for the mdr-shared C ABI"
+readme = { text = "ctypes bindings for libmdr (mdr-shared).", content-type = "text/plain" }
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+
+[project.optional-dependencies]
+dev = []
+bt = ["libmdr-bt"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+libmdr = ["_native/*"]
