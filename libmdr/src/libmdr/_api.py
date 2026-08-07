@@ -129,6 +129,50 @@ class MDREqualizer(Structure):
     ]
 
 
+class MDRPairedDevice(Structure):
+    _fields_ = [
+        ("index", c_uint32),
+        ("connected", MDRBoolean),
+        ("playback_device", MDRBoolean),
+    ]
+
+
+class MDRPairedDeviceAction(Structure):
+    _fields_ = [
+        ("command", c_uint32),
+        ("device_id", c_char_p),
+        ("device_id_size", c_uint32),
+    ]
+
+
+class MDRPairing(Structure):
+    _fields_ = [
+        ("enabled", MDRBoolean),
+    ]
+
+
+class MDRGeneralSettingInfo(Structure):
+    _fields_ = [
+        ("index", c_uint32),
+        ("type", c_uint32),
+        ("writable", MDRBoolean),
+    ]
+
+
+class MDRGeneralSetting(Structure):
+    _fields_ = [
+        ("index", c_uint32),
+        ("boolean_value", MDRBoolean),
+    ]
+
+
+class MDRAssignableControls(Structure):
+    _fields_ = [
+        ("left", c_uint32),
+        ("right", c_uint32),
+    ]
+
+
 class MDRPower(Structure):
     _fields_ = [
         ("auto_power_off_minutes", c_uint32),
@@ -136,6 +180,26 @@ class MDRPower(Structure):
         ("auto_pause", MDRBoolean),
         ("head_gesture", MDRBoolean),
         ("shutdown_requested", MDRBoolean),
+    ]
+
+
+class MDRVoiceGuidance(Structure):
+    _fields_ = [
+        ("enabled", MDRBoolean),
+        ("volume", c_int8),
+    ]
+
+
+class MDRConnectionMode(Structure):
+    _fields_ = [
+        ("audio_priority", c_uint32),
+    ]
+
+
+class MDRSafeListening(Structure):
+    _fields_ = [
+        ("sound_pressure", c_uint8),
+        ("preview", MDRBoolean),
     ]
 
 
@@ -230,10 +294,52 @@ def _bind() -> None:
     lib.mdrHeadphonesGetEqualizerBands.restype = MDRResult
     lib.mdrHeadphonesSetEqualizerBands.argtypes = [c_void_p, POINTER(c_int8), c_uint32]
     lib.mdrHeadphonesSetEqualizerBands.restype = MDRResult
+    lib.mdrHeadphonesGetPairedDevices.argtypes = [
+        c_void_p,
+        POINTER(MDRPairedDevice),
+        POINTER(c_uint32),
+    ]
+    lib.mdrHeadphonesGetPairedDevices.restype = MDRResult
+    lib.mdrHeadphonesSetPairedDevice.argtypes = [c_void_p, POINTER(MDRPairedDeviceAction)]
+    lib.mdrHeadphonesSetPairedDevice.restype = MDRResult
+    lib.mdrHeadphonesGetPairing.argtypes = [c_void_p, POINTER(MDRPairing)]
+    lib.mdrHeadphonesGetPairing.restype = MDRResult
+    lib.mdrHeadphonesSetPairing.argtypes = [c_void_p, POINTER(MDRPairing)]
+    lib.mdrHeadphonesSetPairing.restype = MDRResult
+    lib.mdrHeadphonesGetGeneralSettingInfo.argtypes = [
+        c_void_p,
+        POINTER(MDRGeneralSettingInfo),
+        POINTER(c_uint32),
+    ]
+    lib.mdrHeadphonesGetGeneralSettingInfo.restype = MDRResult
+    lib.mdrHeadphonesGetGeneralSetting.argtypes = [
+        c_void_p,
+        c_uint32,
+        POINTER(MDRGeneralSetting),
+    ]
+    lib.mdrHeadphonesGetGeneralSetting.restype = MDRResult
+    lib.mdrHeadphonesSetGeneralSetting.argtypes = [c_void_p, POINTER(MDRGeneralSetting)]
+    lib.mdrHeadphonesSetGeneralSetting.restype = MDRResult
+    lib.mdrHeadphonesGetAssignableControls.argtypes = [c_void_p, POINTER(MDRAssignableControls)]
+    lib.mdrHeadphonesGetAssignableControls.restype = MDRResult
+    lib.mdrHeadphonesSetAssignableControls.argtypes = [c_void_p, POINTER(MDRAssignableControls)]
+    lib.mdrHeadphonesSetAssignableControls.restype = MDRResult
     lib.mdrHeadphonesGetPower.argtypes = [c_void_p, POINTER(MDRPower)]
     lib.mdrHeadphonesGetPower.restype = MDRResult
     lib.mdrHeadphonesSetPower.argtypes = [c_void_p, POINTER(MDRPower)]
     lib.mdrHeadphonesSetPower.restype = MDRResult
+    lib.mdrHeadphonesGetVoiceGuidance.argtypes = [c_void_p, POINTER(MDRVoiceGuidance)]
+    lib.mdrHeadphonesGetVoiceGuidance.restype = MDRResult
+    lib.mdrHeadphonesSetVoiceGuidance.argtypes = [c_void_p, POINTER(MDRVoiceGuidance)]
+    lib.mdrHeadphonesSetVoiceGuidance.restype = MDRResult
+    lib.mdrHeadphonesGetConnectionMode.argtypes = [c_void_p, POINTER(MDRConnectionMode)]
+    lib.mdrHeadphonesGetConnectionMode.restype = MDRResult
+    lib.mdrHeadphonesSetConnectionMode.argtypes = [c_void_p, POINTER(MDRConnectionMode)]
+    lib.mdrHeadphonesSetConnectionMode.restype = MDRResult
+    lib.mdrHeadphonesGetSafeListening.argtypes = [c_void_p, POINTER(MDRSafeListening)]
+    lib.mdrHeadphonesGetSafeListening.restype = MDRResult
+    lib.mdrHeadphonesSetSafeListening.argtypes = [c_void_p, POINTER(MDRSafeListening)]
+    lib.mdrHeadphonesSetSafeListening.restype = MDRResult
 
 
 _bind()

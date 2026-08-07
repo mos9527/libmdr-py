@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from ctypes import byref, c_uint32, c_void_p, create_string_buffer
+from ctypes import byref, c_int8, c_uint32, c_void_p, create_string_buffer
 from typing import TYPE_CHECKING
 
 from . import _api, _dll, constants, result
 from .connection import Connection
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
 
 class Headphones:
@@ -139,6 +139,39 @@ class Headphones:
         result.check(_dll.lib().mdrHeadphonesGetPlayback(self.handle, byref(playback)))
         return playback
 
+    def set_playback(self, playback: _api.MDRPlayback) -> None:
+        result.check(_dll.lib().mdrHeadphonesSetPlayback(self.handle, byref(playback)))
+
+    def set_volume(self, volume: int) -> None:
+        playback = self.get_playback()
+        playback.volume = max(0, min(30, int(volume)))
+        self.set_playback(playback)
+
+    def playback_command(self, action: int) -> None:
+        command = _api.MDRPlaybackCommand(action=action)
+        result.check(
+            _dll.lib().mdrHeadphonesPlayback(self.handle, byref(command)),
+            allow_inprogress=True,
+        )
+
+    def play(self) -> None:
+        self.playback_command(constants.PLAYBACK_PLAY)
+
+    def pause(self) -> None:
+        self.playback_command(constants.PLAYBACK_PAUSE)
+
+    def next_track(self) -> None:
+        self.playback_command(constants.PLAYBACK_NEXT)
+
+    def previous_track(self) -> None:
+        self.playback_command(constants.PLAYBACK_PREVIOUS)
+
+    def toggle_playback(self) -> None:
+        if int(self.get_playback().status) == constants.PLAYBACK_PLAYING:
+            self.pause()
+        else:
+            self.play()
+
     def get_noise_control(self) -> _api.MDRNoiseControl:
         noise = _api.MDRNoiseControl()
         result.check(_dll.lib().mdrHeadphonesGetNoiseControl(self.handle, byref(noise)))
@@ -161,3 +194,153 @@ class Headphones:
         noise.mode = order[(index + 1) % len(order)]
         self.set_noise_control(noise)
         return int(noise.mode)
+
+    def get_speak_to_chat(self) -> _api.MDRSpeakToChat:
+        value = _api.MDRSpeakToChat()
+        result.check(_dll.lib().mdrHeadphonesGetSpeakToChat(self.handle, byref(value)))
+        return value
+
+    def set_speak_to_chat(self, value: _api.MDRSpeakToChat) -> None:
+        result.check(_dll.lib().mdrHeadphonesSetSpeakToChat(self.handle, byref(value)))
+
+    def get_listening(self) -> _api.MDRListening:
+        value = _api.MDRListening()
+        result.check(_dll.lib().mdrHeadphonesGetListening(self.handle, byref(value)))
+        return value
+
+    def set_listening(self, value: _api.MDRListening) -> None:
+        result.check(_dll.lib().mdrHeadphonesSetListening(self.handle, byref(value)))
+
+    def get_equalizer(self) -> _api.MDREqualizer:
+        value = _api.MDREqualizer()
+        result.check(_dll.lib().mdrHeadphonesGetEqualizer(self.handle, byref(value)))
+        return value
+
+    def set_equalizer(self, value: _api.MDREqualizer) -> None:
+        result.check(_dll.lib().mdrHeadphonesSetEqualizer(self.handle, byref(value)))
+
+    def get_equalizer_bands(self) -> list[int]:
+        lib = _dll.lib()
+        count = c_uint32(0)
+        result.check(lib.mdrHeadphonesGetEqualizerBands(self.handle, None, byref(count)))
+        if count.value == 0:
+            return []
+        array = (c_int8 * count.value)()
+        result.check(lib.mdrHeadphonesGetEqualizerBands(self.handle, array, byref(count)))
+        return [int(array[i]) for i in range(count.value)]
+
+    def set_equalizer_bands(self, bands: Sequence[int]) -> None:
+        count = len(bands)
+        array = (c_int8 * count)(*(int(v) for v in bands))
+        result.check(_dll.lib().mdrHeadphonesSetEqualizerBands(self.handle, array, count))
+
+    def get_paired_devices(self) -> list[_api.MDRPairedDevice]:
+        lib = _dll.lib()
+        count = c_uint32(0)
+        result.check(lib.mdrHeadphonesGetPairedDevices(self.handle, None, byref(count)))
+        if count.value == 0:
+            return []
+        array = (_api.MDRPairedDevice * count.value)()
+        result.check(lib.mdrHeadphonesGetPairedDevices(self.handle, array, byref(count)))
+        return [array[i] for i in range(count.value)]
+
+    def paired_device_name(self, index: int) -> str:
+        return self.get_text(constants.TEXT_PAIRED_DEVICE_NAME, index)
+
+    def paired_device_id(self, index: int) -> str:
+        return self.get_text(constants.TEXT_PAIRED_DEVICE_ID, index)
+
+    def set_paired_device(self, command: int, device_id: str) -> None:
+        raw = device_id.encode("utf-8")
+        action = _api.MDRPairedDeviceAction(
+            command=command,
+            device_id=raw,
+            device_id_size=len(raw),
+        )
+        result.check(
+            _dll.lib().mdrHeadphonesSetPairedDevice(self.handle, byref(action)),
+            allow_inprogress=True,
+        )
+
+    def get_pairing(self) -> _api.MDRPairing:
+        value = _api.MDRPairing()
+        result.check(_dll.lib().mdrHeadphonesGetPairing(self.handle, byref(value)))
+        return value
+
+    def set_pairing(self, enabled: bool) -> None:
+        value = _api.MDRPairing(enabled=constants.TRUE if enabled else constants.FALSE)
+        result.check(_dll.lib().mdrHeadphonesSetPairing(self.handle, byref(value)))
+
+    def get_general_setting_info(self) -> list[_api.MDRGeneralSettingInfo]:
+        lib = _dll.lib()
+        count = c_uint32(0)
+        result.check(lib.mdrHeadphonesGetGeneralSettingInfo(self.handle, None, byref(count)))
+        if count.value == 0:
+            return []
+        array = (_api.MDRGeneralSettingInfo * count.value)()
+        result.check(lib.mdrHeadphonesGetGeneralSettingInfo(self.handle, array, byref(count)))
+        return [array[i] for i in range(count.value)]
+
+    def get_general_setting(self, index: int) -> _api.MDRGeneralSetting:
+        value = _api.MDRGeneralSetting()
+        result.check(_dll.lib().mdrHeadphonesGetGeneralSetting(self.handle, index, byref(value)))
+        return value
+
+    def set_general_setting(self, index: int, enabled: bool) -> None:
+        value = _api.MDRGeneralSetting(
+            index=index,
+            boolean_value=constants.TRUE if enabled else constants.FALSE,
+        )
+        result.check(_dll.lib().mdrHeadphonesSetGeneralSetting(self.handle, byref(value)))
+
+    def general_setting_subject(self, index: int) -> str:
+        return self.get_text(constants.TEXT_GENERAL_SETTING_SUBJECT, index)
+
+    def general_setting_summary(self, index: int) -> str:
+        return self.get_text(constants.TEXT_GENERAL_SETTING_SUMMARY, index)
+
+    def get_assignable_controls(self) -> _api.MDRAssignableControls:
+        value = _api.MDRAssignableControls()
+        result.check(_dll.lib().mdrHeadphonesGetAssignableControls(self.handle, byref(value)))
+        return value
+
+    def set_assignable_controls(self, value: _api.MDRAssignableControls) -> None:
+        result.check(_dll.lib().mdrHeadphonesSetAssignableControls(self.handle, byref(value)))
+
+    def get_power(self) -> _api.MDRPower:
+        value = _api.MDRPower()
+        result.check(_dll.lib().mdrHeadphonesGetPower(self.handle, byref(value)))
+        return value
+
+    def set_power(self, value: _api.MDRPower) -> None:
+        result.check(_dll.lib().mdrHeadphonesSetPower(self.handle, byref(value)))
+
+    def shutdown(self) -> None:
+        """Ask the device to power off (needs a commit to take effect)."""
+        power = self.get_power()
+        power.shutdown_requested = constants.TRUE
+        self.set_power(power)
+
+    def get_voice_guidance(self) -> _api.MDRVoiceGuidance:
+        value = _api.MDRVoiceGuidance()
+        result.check(_dll.lib().mdrHeadphonesGetVoiceGuidance(self.handle, byref(value)))
+        return value
+
+    def set_voice_guidance(self, value: _api.MDRVoiceGuidance) -> None:
+        result.check(_dll.lib().mdrHeadphonesSetVoiceGuidance(self.handle, byref(value)))
+
+    def get_connection_mode(self) -> _api.MDRConnectionMode:
+        value = _api.MDRConnectionMode()
+        result.check(_dll.lib().mdrHeadphonesGetConnectionMode(self.handle, byref(value)))
+        return value
+
+    def set_connection_mode(self, value: _api.MDRConnectionMode) -> None:
+        result.check(_dll.lib().mdrHeadphonesSetConnectionMode(self.handle, byref(value)))
+
+    def get_safe_listening(self) -> _api.MDRSafeListening:
+        value = _api.MDRSafeListening()
+        result.check(_dll.lib().mdrHeadphonesGetSafeListening(self.handle, byref(value)))
+        return value
+
+    def set_safe_listening(self, value: _api.MDRSafeListening) -> None:
+        result.check(_dll.lib().mdrHeadphonesSetSafeListening(self.handle, byref(value)))

@@ -163,16 +163,6 @@ def _build(targets: list[str], build_dir: Path | None = None, *, config: str | N
     return build_dir
 
 
-def _output_dir_args(destination: Path) -> list[str]:
-    # Redirect shared-lib output into `destination`; per-config generators
-    # still nest a <CONFIG> subdir, which stage_libraries() flattens.
-    d = str(destination)
-    return [
-        f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={d}",
-        f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={d}",
-    ]
-
-
 def _find_built(destination: Path, target: str) -> Path:
     base = _TARGET_BASENAMES[target]
     names = {f"{base}{suf}" for suf in _SUFFIXES}
@@ -190,11 +180,15 @@ def stage_libraries(targets: list[str], destination: Path) -> list[Path]:
     """Build the shared targets and emit them (flattened) into `destination`."""
     destination = Path(destination).resolve()
     destination.mkdir(parents=True, exist_ok=True)
-    _build(targets, extra_args=_output_dir_args(destination))
+    # Build into the default build directory (e.g. build/python/) instead of
+    # redirecting CMake output directly into _native/.  That avoids CMake's
+    # per-config subdir (Release/ on MSVC) being discovered as a namespace
+    # package by setuptools.
+    build_dir = _build(targets)
     staged: list[Path] = []
     for target in targets:
-        found = _find_built(destination, target)
-        final = destination / found.name  # flatten any <CONFIG> subdir
+        found = _find_built(build_dir, target)
+        final = destination / found.name
         if found.resolve() != final.resolve():
             shutil.copy2(found, final)
         staged.append(final)
@@ -221,7 +215,9 @@ class build_py(_build_py):
 
 class editable_wheel(_editable_wheel):
     def run(self) -> None:
-        _stage_native()
+        # build_py.run() (called internally by super()) already handles
+        # the native build via _stage_native().  Calling it here too
+        # would trigger a wasteful second configure+build cycle.
         super().run()
 
 
