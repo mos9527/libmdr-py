@@ -9,3 +9,4 @@ pip install -e libmdr-bt
 Running the Example
 ---
 python -m examples.tui
+python -m examples.qt
