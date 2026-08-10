@@ -12,6 +12,20 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
 
+class PairedDevice:
+    def __init__(
+        self,
+        name: str,
+        address: str,
+        connected: bool,
+        playback: bool,
+    ) -> None:
+        self.name = name
+        self.address = address
+        self.connected = connected
+        self.playback = playback
+
+
 class Headphones:
     def __init__(self, connection: Connection, *, abi_version: int = result.ABI_VERSION) -> None:
         handle = c_void_p()
@@ -234,7 +248,7 @@ class Headphones:
         array = (c_int8 * count)(*(int(v) for v in bands))
         result.check(_dll.lib().mdrHeadphonesSetEqualizerBands(self.handle, array, count))
 
-    def get_paired_devices(self) -> list[_api.MDRPairedDevice]:
+    def get_paired_devices(self) -> list[PairedDevice]:
         lib = _dll.lib()
         count = c_uint32(0)
         result.check(lib.mdrHeadphonesGetPairedDevices(self.handle, None, byref(count)))
@@ -242,13 +256,19 @@ class Headphones:
             return []
         array = (_api.MDRPairedDevice * count.value)()
         result.check(lib.mdrHeadphonesGetPairedDevices(self.handle, array, byref(count)))
-        return [array[i] for i in range(count.value)]
-
-    def paired_device_name(self, index: int) -> str:
-        return self.get_text(constants.TEXT_PAIRED_DEVICE_NAME, index)
-
-    def paired_device_id(self, index: int) -> str:
-        return self.get_text(constants.TEXT_PAIRED_DEVICE_ID, index)
+        out: list[PairedDevice] = []
+        for d in array:
+            name = d.name.decode("utf-8", errors="replace").rstrip("\x00") or "(unknown)"
+            address = d.macAddress.decode("utf-8", errors="replace").rstrip("\x00")
+            out.append(
+                PairedDevice(
+                    name=name,
+                    address=address,
+                    connected=bool(int(d.connected)),
+                    playback=bool(int(d.playback_device)),
+                )
+            )
+        return out
 
     def set_paired_device(self, command: int, device_id: str) -> None:
         raw = device_id.encode("utf-8")

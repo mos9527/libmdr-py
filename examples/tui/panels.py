@@ -573,13 +573,10 @@ class DevicesPanel(Panel):
             rows = []
             ids = []
             for device in devices:
-                index = int(device.index)
-                name = hp.paired_device_name(index) or "(unknown)"
-                address = hp.paired_device_id(index)
                 rows.append(
-                    (name, address, _flag(device.connected), _flag(device.playback_device))
+                    (device.name, device.address, _flag(device.connected), _flag(device.playback))
                 )
-                ids.append(address)
+                ids.append(device.address)
         except result.MDRError as exc:
             self.report(f"[red]paired devices:[/red] {exc}")
             return

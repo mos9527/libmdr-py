@@ -131,9 +131,10 @@ class MDREqualizer(Structure):
 
 class MDRPairedDevice(Structure):
     _fields_ = [
-        ("index", c_uint32),
         ("connected", MDRBoolean),
         ("playback_device", MDRBoolean),
+        ("macAddress", c_char * 18),
+        ("name", c_char * 128),
     ]
 
 
