@@ -1,4 +1,4 @@
-"""Main window: navigation, device bar, worker wiring, dark theme."""
+"""Main window: navigation, device bar, worker wiring, default Windows 2000 theme."""
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ from .qt_compat import (
     QComboBox,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
+    QMenu,
+    QMenuBar,
     QPushButton,
-    QStackedWidget,
+    QTabWidget,
     QVBoxLayout,
     Qt,
     QWidget,
@@ -36,10 +36,10 @@ from .pages import (
 _PAGE_TITLES = ["概览", "声音", "均衡器", "播放", "设备", "系统", "关于", "日志"]
 
 _STATUS_COLOR = {
-    "idle": "#7b8696",
+    "idle": "#808080",
     "connecting": "#ffb454",
     "connected": "#54d98c",
-    "disconnected": "#7b8696",
+    "disconnected": "#808080",
     "failed": "#ff5d5d",
 }
 
@@ -94,26 +94,14 @@ class MainWindow(QMainWindow):
         central = QWidget()
         central.setObjectName("central")
         self.setCentralWidget(central)
-        root = QHBoxLayout(central)
+        self._build_menu()
+        root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self._nav = QListWidget()
-        self._nav.setObjectName("nav")
-        self._nav.setFixedWidth(168)
-        for title in _PAGE_TITLES:
-            self._nav.addItem(QListWidgetItem(title))
-        self._nav.currentRowChanged.connect(self._on_nav)
-        root.addWidget(self._nav)
+        root.addWidget(self._build_device_bar())
 
-        right = QVBoxLayout()
-        right.setContentsMargins(16, 16, 16, 16)
-        right.setSpacing(14)
-        root.addLayout(right, 1)
-
-        right.addWidget(self._build_device_bar())
-
-        self._stack = QStackedWidget()
+        self._tabs = QTabWidget()
         self._pages = [
             OverviewPage(self),
             SoundPage(self),
@@ -125,12 +113,27 @@ class MainWindow(QMainWindow):
             LogPage(self),
         ]
         self._log_page: LogPage = self._pages[-1]
-        for page in self._pages:
-            self._stack.addWidget(page)
-        right.addWidget(self._stack, 1)
+        for title, page in zip(_PAGE_TITLES, self._pages):
+            self._tabs.addTab(page, title)
+        root.addWidget(self._tabs, 1)
 
-        self._nav.setCurrentRow(0)
         self.statusBar().showMessage("就绪")
+
+    def _build_menu(self) -> None:
+        menubar = self.menuBar()
+        file_menu = menubar.addMenu("文件(&F)")
+        file_menu.addAction("退出(&X)", self.close)
+        view_menu = menubar.addMenu("视图(&V)")
+        view_menu.addAction(
+            "关于本机", lambda: self._tabs.setCurrentWidget(self._pages[6])
+        )
+        view_menu.addAction(
+            "日志", lambda: self._tabs.setCurrentWidget(self._pages[7])
+        )
+        help_menu = menubar.addMenu("帮助(&H)")
+        help_menu.addAction(
+            "关于 Sony MDR…", lambda: self._tabs.setCurrentWidget(self._pages[6])
+        )
 
     def _build_device_bar(self) -> QWidget:
         bar = QWidget()
@@ -166,18 +169,17 @@ class MainWindow(QMainWindow):
         self._backend_label.setObjectName("muted")
         layout.addWidget(self._backend_label)
 
-        self._ble_switch = Switch()
+        self._ble_switch = Switch("BLE")
         self._ble_switch.setChecked(self._ble)
         self._ble_switch.toggled.connect(self._on_ble_toggle)
-        ble_wrap = QWidget()
-        ble_wrap.setLayout(hbox(QLabel("BLE"), self._ble_switch))
-        layout.addWidget(ble_wrap)
+        layout.addWidget(self._ble_switch)
 
         layout.addWidget(QLabel("主题"))
         self._theme_combo = QComboBox()
         for title, key in available_themes():
             self._theme_combo.addItem(title, key)
-        self._theme_combo.setCurrentText("深色 Fusion")
+        idx = self._theme_combo.findData("win2000")
+        self._theme_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._theme_combo.currentIndexChanged.connect(self._on_theme)
         layout.addWidget(self._theme_combo)
 
@@ -189,8 +191,9 @@ class MainWindow(QMainWindow):
         return bar
 
     def _set_status_color(self, color: str) -> None:
+        # A small square indicator with a 3D edge — no rounded corners.
         self._status_led.setStyleSheet(
-            f"background-color: {color}; border-radius: 6px;"
+            f"background-color: {color}; border: 1px solid #000000;"
         )
 
     # -- worker wiring -----------------------------------------------------
@@ -204,8 +207,6 @@ class MainWindow(QMainWindow):
         w.event_occurred.connect(self._on_event)
 
     # -- slots -------------------------------------------------------------
-    def _on_nav(self, row: int) -> None:
-        self._stack.setCurrentIndex(row)
 
     def _on_backend(self, backend: str) -> None:
         label = {"classic": "经典蓝牙", "ble": "BLE"}.get(backend, backend)
@@ -319,7 +320,7 @@ def main() -> None:
     args = parser.parse_args()
 
     app = QApplication(sys.argv)
-    set_theme(app, "fusion")
+    set_theme(app, "win2000")
     window = MainWindow(ble=args.ble)
     window.show()
     sys.exit(app.exec())

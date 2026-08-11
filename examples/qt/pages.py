@@ -141,11 +141,9 @@ class OverviewPage(Page):
         self._noise_seg.changed.connect(lambda v: self._ctl.set("noise_mode", v))
         self._ambient = SliderRow("环境声级别", 1, 20, 10)
         self._ambient.valueChanged.connect(lambda v: self._ctl.set("noise_ambient", v))
-        self._voice = Switch()
+        self._voice = Switch("聚焦人声")
         self._voice.toggled.connect(lambda v: self._ctl.set_bool("noise_voice", v))
-        self._noise_card.add(
-            self._noise_seg, self._ambient, labeled("聚焦人声", self._voice)
-        )
+        self._noise_card.add(self._noise_seg, self._ambient, self._voice)
 
         # playback quick
         self._play_card = Card("播放控制")
@@ -233,9 +231,9 @@ class SoundPage(Page):
         self._noise_seg.changed.connect(lambda v: self._ctl.set("noise_mode", v))
         self._ambient = SliderRow("环境声级别", 1, 20, 10)
         self._ambient.valueChanged.connect(lambda v: self._ctl.set("noise_ambient", v))
-        self._voice = Switch()
+        self._voice = Switch("聚焦人声")
         self._voice.toggled.connect(lambda v: self._ctl.set_bool("noise_voice", v))
-        self._adaptive = Switch()
+        self._adaptive = Switch("自适应环境声")
         self._adaptive.toggled.connect(lambda v: self._ctl.set_bool("noise_adaptive", v))
         self._adaptive_sens = EnumCombo(
             "自适应灵敏度", _opts(C.ADAPTIVE_SENSITIVITY_NAMES)
@@ -248,23 +246,21 @@ class SoundPage(Page):
         self._noise_card.add(
             self._noise_seg,
             self._ambient,
-            labeled("聚焦人声", self._voice),
-            labeled("自适应环境声", self._adaptive),
+            self._voice,
+            self._adaptive,
             self._adaptive_sens,
             self._button,
         )
 
         # speak-to-chat
         self._stc_card = Card("语音聊天 (Speak-to-Chat)")
-        self._stc_en = Switch()
+        self._stc_en = Switch("启用语音聊天")
         self._stc_en.toggled.connect(lambda v: self._ctl.set_bool("stc_enabled", v))
         self._stc_sens = EnumCombo("灵敏度", _opts(C.SPEECH_SENSITIVITY_NAMES))
         self._stc_sens.valueChanged.connect(lambda v: self._ctl.set("stc_sensitivity", v))
         self._stc_timeout = EnumCombo("超时", _opts(C.SPEAK_TIMEOUT_NAMES))
         self._stc_timeout.valueChanged.connect(lambda v: self._ctl.set("stc_timeout", v))
-        self._stc_card.add(
-            labeled("启用", self._stc_en), self._stc_sens, self._stc_timeout
-        )
+        self._stc_card.add(self._stc_en, self._stc_sens, self._stc_timeout)
 
         # listening
         self._listen_card = Card("聆听模式")
@@ -334,7 +330,7 @@ class EqualizerPage(Page):
         self._preset.valueChanged.connect(lambda v: self._ctl.set("eq_preset", v))
         self._bass = SliderRow("清低音 (Clear Bass)", -10, 10, 0)
         self._bass.valueChanged.connect(lambda v: self._ctl.set("eq_bass", v))
-        self._dsee = Switch()
+        self._dsee = Switch("DSEE 音频增强")
         self._dsee.toggled.connect(lambda v: self._ctl.set_bool("eq_dsee", v))
         self._dsee_label = QLabel("")
         self._dsee_label.setObjectName("muted")
@@ -434,7 +430,7 @@ class PlaybackPage(Page):
 class DevicesPage(Page):
     def _build_content(self, w: QWidget) -> None:
         self._pair_card = Card("配对模式")
-        self._pair_en = Switch()
+        self._pair_en = Switch("开启配对模式")
         self._pair_en.toggled.connect(lambda v: self._ctl.pairing(v))
         self._pair_hint = QLabel("开启后可被新设备发现并完成配对。")
         self._pair_hint.setObjectName("muted")
@@ -515,9 +511,9 @@ class SystemPage(Page):
             ],
         )
         self._wearing.valueChanged.connect(lambda v: self._ctl.set("power_wearing", v))
-        self._autopause = Switch()
+        self._autopause = Switch("自动暂停")
         self._autopause.toggled.connect(lambda v: self._ctl.set_bool("power_autopause", v))
-        self._gesture = Switch()
+        self._gesture = Switch("手势控制")
         self._gesture.toggled.connect(lambda v: self._ctl.set_bool("power_gesture", v))
         self._shutdown_btn = QPushButton("关闭耳机")
         self._shutdown_btn.setObjectName("danger")
@@ -532,7 +528,7 @@ class SystemPage(Page):
 
         # voice guidance
         self._vg_card = Card("语音引导")
-        self._vg_en = Switch()
+        self._vg_en = Switch("启用语音引导")
         self._vg_en.toggled.connect(lambda v: self._ctl.set_bool("voice_enabled", v))
         self._vg_vol = SliderRow("音量", -6, 6, 0)
         self._vg_vol.valueChanged.connect(lambda v: self._ctl.set("voice_volume", v))
@@ -561,7 +557,7 @@ class SystemPage(Page):
 
         # safe listening
         self._safe_card = Card("安全聆听")
-        self._safe_prev = Switch()
+        self._safe_prev = Switch("试听安全音量")
         self._safe_prev.toggled.connect(lambda v: self._ctl.set_bool("safe_preview", v))
         self._safe_label = QLabel("")
         self._safe_label.setObjectName("muted")
@@ -589,15 +585,13 @@ class SystemPage(Page):
         for s in settings:
             if s["type"] != C.GENERAL_SETTING_BOOLEAN or not s["writable"]:
                 continue
-            sw = Switch()
+            sw = Switch(s["subject"] or f"设置 #{s['index']}")
             sw.setEnabled(s["writable"])
             sw.setChecked(s["value"])
             sw.toggled.connect(
                 lambda v, idx=s["index"]: self._ctl.general(idx, v)
             )
-            label = s["subject"] or f"设置 #{s['index']}"
-            row = labeled(label, sw)
-            self._gen_layout.addWidget(row)
+            self._gen_layout.addWidget(sw)
             self._gen_switches[s["index"]] = sw
         if self._gen_layout.count() == 0:
             hint = QLabel("此设备没有可调的通用设置。")

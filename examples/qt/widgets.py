@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from .qt_compat import (
     QApplication,
-    QBrush,
+    QCheckBox,
     QColor,
     QFont,
     QFrame,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
-    QPainter,
-    QPen,
-    QPushButton,
+    QPalette,
     QProgressBar,
+    QRadioButton,
     QSlider,
     QSizePolicy,
     QButtonGroup,
@@ -23,7 +23,6 @@ from .qt_compat import (
     Qt,
     Signal,
     QWidget,
-    QPointF,
 )
 
 # --------------------------------------------------------------------------
@@ -33,16 +32,27 @@ from .qt_compat import (
 # Theme choices offered in the UI. ``key`` selects the Qt style; themes that
 # are not available on the current platform fall back automatically.
 THEMES = [
-    ("现代 Windows", "windowsvista"),
+    ("Windows 2000", "win2000"),
     ("经典 Windows", "windows"),
+    ("现代 Windows", "windowsvista"),
     ("深色 Fusion", "fusion"),
 ]
+
+# Themes that don't map 1:1 to a QStyleFactory key.
+_SPECIAL_STYLES = {"fusion", "win2000"}
 
 
 def available_themes() -> list:
     """Return only the themes whose underlying Qt style exists here."""
     keys = {k.lower() for k in QStyleFactory.keys()}
-    return [t for t in THEMES if t[1] in keys or t[1] == "fusion"]
+    out = []
+    for title, key in THEMES:
+        if key in _SPECIAL_STYLES:
+            if key == "fusion" or "windows" in keys:
+                out.append((title, key))
+        elif key in keys:
+            out.append((title, key))
+    return out
 
 
 def _style_for(key: str) -> str:
@@ -57,6 +67,18 @@ def _style_for(key: str) -> str:
 
 def set_theme(app: QApplication, key: str) -> None:
     """Apply a theme by its ``key`` (see ``THEMES``)."""
+    if key == "win2000":
+        # The classic Windows 2000 look: the hand-coded "windows" style (square
+        # 3D controls, independent of the host OS theme) plus the iconic gray
+        # palette with navy selection.
+        style_name = _style_for("windows") or _style_for("fusion")
+        if style_name:
+            app.setStyle(style_name)
+        app.setFont(QFont("SimSun", 11))
+        _apply_win2000_palette(app)
+        app.setStyleSheet(STYLE_WIN2000)
+        return
+
     style_name = _style_for(key)
     if style_name:
         app.setStyle(style_name)
@@ -94,6 +116,33 @@ def _apply_dark_palette(app: QApplication) -> None:
     app.setPalette(palette)
 
 
+def _apply_win2000_palette(app: QApplication) -> None:
+    # The classic Windows 2000 "Windows Standard" color scheme.
+    palette = app.palette()
+    C = palette.ColorRole
+    palette.setColor(C.Window, QColor("#c0c0c0"))
+    palette.setColor(C.WindowText, QColor("#000000"))
+    palette.setColor(C.Base, QColor("#ffffff"))
+    palette.setColor(C.AlternateBase, QColor("#ececec"))
+    palette.setColor(C.Text, QColor("#000000"))
+    palette.setColor(C.Button, QColor("#c0c0c0"))
+    palette.setColor(C.ButtonText, QColor("#000000"))
+    palette.setColor(C.BrightText, QColor("#ffffff"))
+    palette.setColor(C.Highlight, QColor("#000080"))
+    palette.setColor(C.HighlightedText, QColor("#ffffff"))
+    palette.setColor(C.Link, QColor("#0000ff"))
+    palette.setColor(C.LinkVisited, QColor("#800080"))
+    palette.setColor(C.ToolTipBase, QColor("#ffffe1"))
+    palette.setColor(C.ToolTipText, QColor("#000000"))
+    # 3D bevel colors: light top/left, dark bottom/right, black outer edge.
+    palette.setColor(C.Light, QColor("#ffffff"))
+    palette.setColor(C.Midlight, QColor("#d4d0c8"))
+    palette.setColor(C.Mid, QColor("#808080"))
+    palette.setColor(C.Dark, QColor("#808080"))
+    palette.setColor(C.Shadow, QColor("#000000"))
+    app.setPalette(palette)
+
+
 def apply_theme(app: QApplication) -> None:
     """Backwards-compatible default: the dark Fusion theme."""
     set_theme(app, "fusion")
@@ -107,31 +156,6 @@ QWidget {
 }
 QMainWindow, QWidget#central {
     background: #0e1116;
-}
-
-/* Navigation sidebar */
-QListWidget#nav {
-    background: #11161d;
-    border: none;
-    border-right: 1px solid #1d242e;
-    padding: 8px 0;
-    outline: 0;
-}
-QListWidget#nav::item {
-    color: #b9c2cf;
-    padding: 10px 16px;
-    border-radius: 8px;
-    margin: 2px 8px;
-}
-QListWidget#nav::item:hover {
-    background: #1a212b;
-    color: #ffffff;
-}
-QListWidget#nav::item:selected {
-    background: #1e3a5f;
-    color: #ffffff;
-    border-left: 3px solid #3b82f6;
-    padding-left: 13px;
 }
 
 /* Cards */
@@ -194,19 +218,6 @@ QPushButton#danger {
     color: #ff8e9e;
 }
 QPushButton#danger:hover { background: #4a2530; }
-
-QPushButton#seg {
-    border-radius: 8px;
-    padding: 7px 10px;
-    background: #1b2230;
-    border: 1px solid #2a3340;
-}
-QPushButton#seg:checked {
-    background: #2563eb;
-    border: 1px solid #3b82f6;
-    color: #ffffff;
-    font-weight: 600;
-}
 
 /* Combo box */
 QComboBox {
@@ -302,29 +313,6 @@ QMainWindow, QWidget#central {
     background: #f3f3f3;
 }
 
-QListWidget#nav {
-    background: #e9eef5;
-    border: none;
-    border-right: 1px solid #cdd6e0;
-    padding: 8px 0;
-    outline: 0;
-}
-QListWidget#nav::item {
-    color: #2b3340;
-    padding: 10px 16px;
-    border-radius: 8px;
-    margin: 2px 8px;
-}
-QListWidget#nav::item:hover {
-    background: #dde6f1;
-}
-QListWidget#nav::item:selected {
-    background: #cfe0f5;
-    color: #10243e;
-    border-left: 3px solid #2563eb;
-    padding-left: 13px;
-}
-
 QFrame#card {
     background: #ffffff;
     border: 1px solid #d3dae3;
@@ -364,6 +352,121 @@ QStatusBar::item { border: none; }
 
 QScrollArea { border: none; background: transparent; }
 QLabel#hint { color: #6b7686; }
+"""
+
+
+# Classic Windows 2000 theme -------------------------------------------------
+# Relies on Qt's hand-coded "windows" style for square 3D controls, so the
+# interactive widgets (buttons, sliders, combo boxes, tabs, check boxes) look
+# authentically 2000-era. We only restyle structural elements and lists, and
+# force everything to sharp corners.
+STYLE_WIN2000 = """
+QWidget {
+    font-family: "SimSun", "宋体";
+    font-size: 11px;
+    color: #000000;
+}
+
+QMainWindow, QWidget#central {
+    background: #c0c0c0;
+}
+
+/* Cards become classic group boxes: an etched frame with its title sitting
+   on the top border. */
+QGroupBox#card {
+    background: #c0c0c0;
+}
+QGroupBox#card::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 0 3px;
+    background: #c0c0c0;
+    color: #000000;
+    font-weight: bold;
+}
+
+/* Top device bar — a raised 3D panel. */
+QWidget#card {
+    background: #c0c0c0;
+    border: 2px ridge #c0c0c0;
+    margin: 2px;
+}
+
+/* Buttons keep their native 3D bevel; only the text is tuned. */
+QPushButton {
+    font-size: 11px;
+    padding: 2px 10px;
+}
+QPushButton#primary { font-weight: bold; }
+QPushButton#danger { color: #a00000; }
+
+/* Combo boxes keep their native 3D look; the drop-down list is white. */
+QComboBox {
+    font-size: 11px;
+}
+QComboBox QAbstractItemView {
+    background: #ffffff;
+    color: #000000;
+    selection-background-color: #000080;
+    selection-color: #ffffff;
+}
+
+/* Tab control — square tabs with 3D bevels. */
+QTabWidget::pane {
+    background: #c0c0c0;
+    border: 2px inset #c0c0c0;
+}
+QTabBar::tab {
+    background: #c0c0c0;
+    border: 2px outset #c0c0c0;
+    padding: 3px 12px;
+    margin: 1px;
+}
+QTabBar::tab:selected {
+    background: #c0c0c0;
+    border: 2px inset #c0c0c0;
+}
+
+/* Tables / lists — sunken white fields. */
+QTableWidget {
+    background: #ffffff;
+    gridline-color: #808080;
+    border: 2px inset #c0c0c0;
+    font-size: 11px;
+}
+QHeaderView::section {
+    background: #c0c0c0;
+    color: #000000;
+    border: 1px outset #c0c0c0;
+    padding: 3px;
+    font-weight: bold;
+}
+QTableWidget::item:selected {
+    background: #000080;
+    color: #ffffff;
+}
+
+/* Log — sunken white, monospaced like a classic console. */
+QPlainTextEdit {
+    background: #ffffff;
+    border: 2px inset #c0c0c0;
+    color: #000000;
+    font-family: "Courier New", "Lucida Console", monospace;
+    font-size: 11px;
+}
+
+QStatusBar {
+    background: #c0c0c0;
+    color: #000000;
+}
+QStatusBar::item { border: none; }
+
+QScrollArea { border: none; background: transparent; }
+QLabel#hint { color: #404040; }
+QLabel#muted { color: #404040; }
+QLabel#titleText { font-size: 12px; font-weight: bold; color: #000000; }
+QLabel#bigValue { font-size: 12px; font-weight: bold; color: #000000; }
 """
 
 
@@ -412,24 +515,19 @@ def vbox(*widgets, spacing: int = 10, margin: int = 0) -> QVBoxLayout:
     return layout
 
 
-class Card(QFrame):
-    """A rounded container with an optional title."""
+class Card(QGroupBox):
+    """A classic group box: an etched frame with its title on the top border.
+    Content is added via :meth:`add` and lands in the inner body layout."""
 
     def __init__(self, title: str | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("card")
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        root = QVBoxLayout(self)
-        root.setContentsMargins(16, 16, 16, 16)
-        root.setSpacing(12)
         if title:
-            t = QLabel(title)
-            t.setObjectName("cardTitle")
-            root.addWidget(t)
+            self.setTitle(title)
         self._body = QVBoxLayout()
-        self._body.setContentsMargins(0, 0, 0, 0)
-        self._body.setSpacing(10)
-        root.addLayout(self._body)
+        self._body.setContentsMargins(10, 14, 10, 10)
+        self._body.setSpacing(8)
+        self.setLayout(self._body)
 
     def body(self) -> QVBoxLayout:
         return self._body
@@ -477,102 +575,72 @@ class BatteryBar(QWidget):
         self._note.setText("充电中" if charging else "")
 
 
-class Switch(QWidget):
-    toggled = Signal(bool)
+class Switch(QCheckBox):
+    """Native checkbox used as an on/off toggle.
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._on = False
-        self.setFixedSize(48, 26)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
+    The ``toggled(bool)`` signal plus ``setChecked``/``isChecked`` come from
+    :class:`QCheckBox`, so the control follows the active theme automatically.
+    The optional ``notify`` argument keeps the old custom-widget call signature
+    working.
+    """
 
-    def isChecked(self) -> bool:
-        return self._on
-
-    def setChecked(self, value: bool, *, notify: bool = False) -> None:
-        if self._on == value:
-            return
-        self._on = value
-        self.update()
-        if notify:
-            self.toggled.emit(value)
-
-    def mousePressEvent(self, event) -> None:  # noqa: ANN001
-        self.setChecked(not self._on, notify=True)
-
-    def paintEvent(self, event) -> None:  # noqa: ANN001
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        h = self.height()
-        r = h / 2
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(QColor("#3a4150") if not self._on else QColor("#2563eb")))
-        p.drawRoundedRect(self.rect(), r, r)
-
-        knob = h - 8
-        x = 4 if not self._on else self.width() - knob - 4
-        p.setBrush(QBrush(QColor("#ffffff")))
-        p.drawEllipse(QPointF(x + knob / 2, h / 2), knob / 2, knob / 2)
+    def setChecked(self, value: bool, notify: bool = False) -> None:  # type: ignore[override]
+        super().setChecked(bool(value))
+        if notify and not self.signalsBlocked():
+            self.toggled.emit(bool(value))
 
 
 class SegmentedControl(QWidget):
+    """Single-choice control built from native radio buttons.
+
+    Behaves like the old segmented control: ``set_options``, ``setValue``,
+    ``set_enabled`` and the ``changed(int)`` signal are unchanged, but the
+    widgets are native :class:`QRadioButton` grouped by a :class:`QButtonGroup`,
+    so they render with the OS look (incl. the light themes).
+    """
+
     changed = Signal(int)
 
-    def __init__(
-        self, options, parent: QWidget | None = None  # list[(text, value)]
-    ) -> None:
+    def __init__(self, options=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._options = list(options)
+        self._options: list = list(options or [])
         self._value = options[0][1] if options else 0
-        self._buttons: list[QPushButton] = []
+        self._buttons: list[QRadioButton] = []
         self._group = QButtonGroup(self)
         self._group.setExclusive(True)
+        self._group.idClicked.connect(self.changed.emit)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
-        for i, (text, value) in enumerate(options):
-            btn = QPushButton(text)
-            btn.setObjectName("seg")
-            btn.setCheckable(True)
-            self._group.addButton(btn, i)
-            layout.addWidget(btn)
-            self._buttons.append(btn)
-        self._group.buttonClicked.connect(self._on_click)
-        self._refresh()
-
-    def _on_click(self, button) -> None:  # noqa: ANN001
-        self._value = button.property("segValue")
-        self._refresh()
-        self.changed.emit(self._value)
+        layout.setSpacing(10)
+        if options:
+            self.set_options(options)
 
     def _refresh(self) -> None:
         for btn in self._buttons:
-            btn.setChecked(btn.property("segValue") == self._value)
+            btn.setChecked(self._group.id(btn) == self._value)
 
     def set_options(self, options) -> None:
-        self._options = list(options)
-        old = self._value
-        # rebuild buttons
         for btn in self._buttons:
             self._group.removeButton(btn)
             btn.deleteLater()
         self._buttons.clear()
-        # clear layout
         while self.layout().count():
             item = self.layout().takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        for i, (text, value) in enumerate(options):
-            btn = QPushButton(text)
-            btn.setObjectName("seg")
-            btn.setCheckable(True)
-            btn.setProperty("segValue", value)
-            self._group.addButton(btn, i)
-            self.layout().addWidget(btn)
-            self._buttons.append(btn)
-        self._group.buttonClicked.connect(self._on_click)
-        self._value = old if any(v == old for _, v in options) else options[0][1]
+        self._options = list(options)
+        for text, value in options:
+            rb = QRadioButton(text)
+            self._group.addButton(rb, int(value))
+            self.layout().addWidget(rb)
+            self._buttons.append(rb)
+        if options:
+            self._value = (
+                self._value
+                if any(v == self._value for _, v in options)
+                else options[0][1]
+            )
         self._refresh()
 
     def setValue(self, value: int, *, notify: bool = False) -> None:

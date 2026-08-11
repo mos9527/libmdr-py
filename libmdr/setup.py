@@ -156,7 +156,7 @@ def _configure(build_dir: Path | None = None, *, extra_args: list[str] | None = 
 
 def _build(targets: list[str], build_dir: Path | None = None, *, config: str | None = None, extra_args: list[str] | None = None) -> Path:
     build_dir = _configure(build_dir, extra_args=extra_args)
-    config = config or os.environ.get("MDR_CMAKE_CONFIG", "Release")
+    config = config or os.environ.get("MDR_CMAKE_CONFIG", "MinSizeRel")
     cmd = [_cmake(), "--build", str(build_dir), "--config", config, "--parallel"]
     for target in targets:
         cmd.extend(["--target", target])
@@ -183,7 +183,7 @@ def stage_libraries(targets: list[str], destination: Path) -> list[Path]:
     destination.mkdir(parents=True, exist_ok=True)
     # Build into the default build directory (e.g. build/python/) instead of
     # redirecting CMake output directly into _native/.  That avoids CMake's
-    # per-config subdir (Release/ on MSVC) being discovered as a namespace
+    # per-config subdir (MinSizeRel/ on MSVC) being discovered as a namespace
     # package by setuptools.
     build_dir = _build(targets)
     staged: list[Path] = []
