@@ -5,6 +5,15 @@ from __future__ import annotations
 FALSE = 0
 TRUE = 1
 
+# MDR protocol version (MDRProtocolVersion) passed to mdrHeadphonesCreate.
+PROTOCOL_V1 = 1
+PROTOCOL_V2 = 2
+
+PROTOCOL_NAMES = {
+    PROTOCOL_V1: "v1",
+    PROTOCOL_V2: "v2",
+}
+
 AVAILABILITY_UNKNOWN = 0
 AVAILABILITY_UNAVAILABLE = 1
 AVAILABILITY_AVAILABLE = 2

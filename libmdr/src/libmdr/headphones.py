@@ -27,12 +27,26 @@ class PairedDevice:
 
 
 class Headphones:
-    def __init__(self, connection: Connection, *, abi_version: int = result.ABI_VERSION) -> None:
+    def __init__(
+        self,
+        connection: Connection,
+        *,
+        abi_version: int = result.ABI_VERSION,
+        protocol_version: int = constants.PROTOCOL_V2,
+    ) -> None:
+        """Open a session against the connected headphones.
+
+        ``protocol_version`` must match the MDR service the connection was
+        established against: :data:`constants.PROTOCOL_V2` for XM5+ (and every
+        BLE device) or :data:`constants.PROTOCOL_V1` for legacy models. It
+        defaults to ``PROTOCOL_V2`` since that is the modern/common case.
+        """
         handle = c_void_p()
         result.check(
             _dll.lib().mdrHeadphonesCreate(
                 abi_version,
                 connection.pointer,
+                protocol_version,
                 byref(handle),
             )
         )

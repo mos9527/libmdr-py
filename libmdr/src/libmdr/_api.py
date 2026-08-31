@@ -237,7 +237,12 @@ def _bind() -> None:
     lib.mdrConnectionGetLastError.argtypes = [POINTER(MDRConnection)]
     lib.mdrConnectionGetLastError.restype = c_char_p
 
-    lib.mdrHeadphonesCreate.argtypes = [c_uint32, POINTER(MDRConnection), POINTER(c_void_p)]
+    lib.mdrHeadphonesCreate.argtypes = [
+        c_uint32,
+        POINTER(MDRConnection),
+        c_uint32,
+        POINTER(c_void_p),
+    ]
     lib.mdrHeadphonesCreate.restype = MDRResult
     lib.mdrHeadphonesDestroy.argtypes = [c_void_p]
     lib.mdrHeadphonesDestroy.restype = None
