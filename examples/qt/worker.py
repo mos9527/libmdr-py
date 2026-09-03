@@ -4,18 +4,20 @@ All blocking C calls happen here, on a dedicated thread, so the GUI never
 freezes.  Communication with the UI goes through Qt signals:
 
 * output signals carry snapshots / status / log lines back to the main thread
-* input signals (``req_*``) are emitted by the UI and executed on this thread
-  via queued connections.
+* input signals (``req_*``) enqueue commands that ``run()`` executes on this
+  thread.
 """
 
 from __future__ import annotations
 
+import queue
 import time
+from collections.abc import Callable
 
 from libmdr import Headphones, constants as C, result
 from libmdr_bt import create_connection
 
-from .qt_compat import QThread, QTimer, Signal, Slot
+from .qt_compat import QThread, Signal, Slot
 
 _PLAYBACK_ACTIONS = {
     "play": C.PLAYBACK_PLAY,
@@ -339,21 +341,40 @@ class DeviceWorker(QThread):
         self._ble = ble
         self._platform = None
         self._headphones = None
-        self._timer = None
         self._last_snapshot = None
+        self._commands: queue.Queue[tuple[Callable, tuple] | None] = queue.Queue()
 
-        self.req_connect.connect(self._on_connect)
-        self.req_disconnect.connect(self._on_disconnect)
-        self.req_scan.connect(self._on_scan)
-        self.req_restart.connect(self._on_restart)
-        self.req_fetch.connect(self._on_fetch)
-        self.req_playback.connect(self._on_playback)
-        self.req_volume.connect(self._on_volume)
-        self.req_set.connect(self._on_set)
-        self.req_set_bool.connect(self._on_set_bool)
-        self.req_eq_band.connect(self._on_eq_band)
-        self.req_paired.connect(self._on_paired)
-        self.req_general.connect(self._on_general)
+        # A QThread object belongs to the thread that created it, so connecting
+        # these signals directly to _on_* would execute all the blocking work
+        # on the GUI thread. The signal handlers only enqueue commands; run()
+        # executes them and owns every native MDR call.
+        self.req_connect.connect(lambda address: self._submit(self._on_connect, address))
+        self.req_disconnect.connect(lambda: self._submit(self._on_disconnect))
+        self.req_scan.connect(lambda: self._submit(self._on_scan))
+        self.req_restart.connect(lambda ble: self._submit(self._on_restart, ble))
+        self.req_fetch.connect(lambda: self._submit(self._on_fetch))
+        self.req_playback.connect(lambda action: self._submit(self._on_playback, action))
+        self.req_volume.connect(lambda volume: self._submit(self._on_volume, volume))
+        self.req_set.connect(lambda name, value: self._submit(self._on_set, name, value))
+        self.req_set_bool.connect(
+            lambda name, value: self._submit(self._on_set_bool, name, value)
+        )
+        self.req_eq_band.connect(
+            lambda index, value: self._submit(self._on_eq_band, index, value)
+        )
+        self.req_paired.connect(
+            lambda command, device_id: self._submit(self._on_paired, command, device_id)
+        )
+        self.req_general.connect(
+            lambda index, value: self._submit(self._on_general, index, value)
+        )
+
+    def _submit(self, callback: Callable, *args: object) -> None:
+        self._commands.put((callback, args))
+
+    def quit(self) -> None:
+        """Stop after commands already submitted by the UI have completed."""
+        self._commands.put(None)
 
     # -- thread entry ------------------------------------------------------
     def run(self) -> None:
@@ -367,20 +388,33 @@ class DeviceWorker(QThread):
         self.backend_ready.emit(self._platform.backend)
         self._scan_emit()
         self.connection_state.emit("idle")
-        self._timer = QTimer()
-        self._timer.timeout.connect(self._tick)
-        self._timer.start(50)
-        self.exec()
+        try:
+            while True:
+                try:
+                    command = self._commands.get(timeout=0.05)
+                except queue.Empty:
+                    self._tick()
+                    continue
+
+                if command is None:
+                    break
+                callback, args = command
+                try:
+                    callback(*args)
+                except Exception as exc:  # noqa: BLE001
+                    self.log_message.emit(f"工作线程错误：{exc}")
+                self._tick()
+        finally:
+            self._teardown_connection()
+            if self._platform is not None:
+                try:
+                    self._platform.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                self._platform = None
 
     # -- poll loop ---------------------------------------------------------
     def _tick(self) -> None:
-        if self._platform is None:
-            return
-        try:
-            self._platform.poll(50)
-        except Exception as exc:  # noqa: BLE001
-            self.log_message.emit(f"平台轮询错误：{exc}")
-
         hp = self._headphones
         if hp is None:
             return
@@ -511,13 +545,14 @@ class DeviceWorker(QThread):
 
             deadline = time.monotonic() + 12
             while time.monotonic() < deadline:
-                poll = self._platform.poll(50)
+                poll = self._platform.poll(0)
                 if poll == result.OK:
                     connected = True
                     break
                 if poll not in (result.INPROGRESS, result.ERROR_TIMEOUT):
                     last_error = self._platform.last_error() or f"poll={poll}"
                     break
+                time.sleep(0.01)
             if connected:
                 break
             last_error = self._platform.last_error() or last_error or "timeout"
@@ -552,11 +587,6 @@ class DeviceWorker(QThread):
 
     @Slot(bool)
     def _on_restart(self, ble: bool) -> None:
-        if self._timer is not None:
-            try:
-                self._timer.stop()
-            except Exception:  # noqa: BLE001
-                pass
         self._teardown_connection()
         if self._platform is not None:
             try:
@@ -574,8 +604,6 @@ class DeviceWorker(QThread):
         self.backend_ready.emit(self._platform.backend)
         self._scan_emit()
         self.connection_state.emit("idle")
-        if self._timer is not None:
-            self._timer.start(50)
 
     @Slot()
     def _on_fetch(self) -> None:
