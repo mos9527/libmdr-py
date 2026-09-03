@@ -217,6 +217,10 @@ AUDIO_PRIORITY_UNKNOWN = 0
 AUDIO_PRIORITY_QUALITY = 1
 AUDIO_PRIORITY_STABILITY = 2
 
+# Keep display metadata below hand-authored; ABI values above are overridden by
+# the generated header-derived definitions.
+from ._generated_constants import *  # noqa: E402,F403
+
 NOISE_MODE_NAMES = {
     NOISE_MODE_OFF: "off",
     NOISE_MODE_CANCELLING: "cancelling",
@@ -418,6 +422,7 @@ FEATURE_NAMES = {
     FEATURE_SHUTDOWN: "Shutdown",
     FEATURE_CONNECTION_MODE: "Connection mode",
     FEATURE_SAFE_LISTENING: "Safe listening",
+    FEATURE_SOURCE_SWITCH_CONTROL: "Source switch control",
 }
 
 EVENT_NAMES = {

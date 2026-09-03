@@ -10,3 +10,13 @@ Running the Example
 ---
 python -m examples.tui
 python -m examples.qt
+
+Regenerating the C ABI Bindings
+---
+With SonyHeadphonesClient checked out next to this repository:
+
+python tooling/generate_bindings.py
+
+Use --source PATH (or MDR_SOURCE_DIR) for another checkout. CI can use
+python tooling/generate_bindings.py --check to reject stale generated files.
+The ABI version is read from mdr-c/Base.h; generation does not bump it.

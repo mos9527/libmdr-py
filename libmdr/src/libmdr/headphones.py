@@ -305,6 +305,26 @@ class Headphones:
         value = _api.MDRPairing(enabled=constants.TRUE if enabled else constants.FALSE)
         result.check(_dll.lib().mdrHeadphonesSetPairing(self.handle, byref(value)))
 
+    def get_source_switch_control(self) -> bool:
+        enabled = _api.MDRBoolean()
+        result.check(_dll.lib().mdrHeadphonesGetSourceSwitchControl(self.handle, byref(enabled)))
+        return bool(enabled.value)
+
+    def set_source_switch_control(self, enabled: bool) -> None:
+        result.check(
+            _dll.lib().mdrHeadphonesSetSourceSwitchControl(
+                self.handle,
+                constants.TRUE if enabled else constants.FALSE,
+            )
+        )
+
+    def get_source_switch_control_result(self) -> int:
+        value = _api.MDRSourceSwitchControlResult()
+        result.check(
+            _dll.lib().mdrHeadphonesGetSourceSwitchControlResult(self.handle, byref(value))
+        )
+        return int(value.value)
+
     def get_general_setting_info(self) -> list[_api.MDRGeneralSettingInfo]:
         lib = _dll.lib()
         count = c_uint32(0)
