@@ -374,7 +374,7 @@ class HeadphonesTui(App[None]):
             self.log_line("[yellow]Headphones not ready[/yellow]")
             return
         try:
-            headphones.request_fetch()
+            headphones.request_sync()
             self.log_line("Fetch requested")
         except result.MDRError as exc:
             self.log_line(f"[red]fetch error:[/red] {exc}")
@@ -534,7 +534,7 @@ class HeadphonesTui(App[None]):
                 if event == C.EVENT_INITIALIZE_COMPLETE:
                     self.log_line("[green]Initialize complete[/green]")
                     self._attach_panels(headphones)
-                    headphones.request_fetch()
+                    headphones.request_sync()
                 elif event == C.EVENT_ALERT:
                     self.log_line(
                         f"[yellow]alert:[/yellow] {headphones.get_text(C.TEXT_LAST_ALERT)}"

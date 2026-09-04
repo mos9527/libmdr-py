@@ -442,7 +442,7 @@ class DeviceWorker(QThread):
         if event == C.EVENT_INITIALIZE_COMPLETE:
             self.log_message.emit("初始化完成，正在获取设备状态…")
             try:
-                self._headphones.request_fetch()
+                self._headphones.request_sync()
             except result.MDRError as exc:
                 self.log_message.emit(f"获取状态失败：{exc}")
         elif event == C.EVENT_SYNC_COMPLETE:
@@ -610,7 +610,7 @@ class DeviceWorker(QThread):
         if self._headphones is None:
             return
         try:
-            self._headphones.request_fetch()
+            self._headphones.request_sync()
         except result.MDRError as exc:
             self.log_message.emit(f"刷新状态失败：{exc}")
 

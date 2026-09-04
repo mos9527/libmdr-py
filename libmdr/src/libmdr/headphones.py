@@ -94,9 +94,9 @@ class Headphones:
             allow_inprogress=True,
         )
 
-    def request_fetch(self) -> int:
+    def request_sync(self) -> int:
         return result.check(
-            _dll.lib().mdrHeadphonesRequestFetch(self.handle),
+            _dll.lib().mdrHeadphonesRequestSync(self.handle),
             allow_inprogress=True,
         )
 

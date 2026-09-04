@@ -274,8 +274,8 @@ def bind(lib: object) -> None:
     lib.mdrHeadphonesIsDirty.restype = MDRBoolean
     lib.mdrHeadphonesRequestInit.argtypes = [c_void_p]
     lib.mdrHeadphonesRequestInit.restype = MDRResult
-    lib.mdrHeadphonesRequestFetch.argtypes = [c_void_p]
-    lib.mdrHeadphonesRequestFetch.restype = MDRResult
+    lib.mdrHeadphonesRequestSync.argtypes = [c_void_p]
+    lib.mdrHeadphonesRequestSync.restype = MDRResult
     lib.mdrHeadphonesRequestCommit.argtypes = [c_void_p]
     lib.mdrHeadphonesRequestCommit.restype = MDRResult
     lib.mdrHeadphonesPoll.argtypes = [c_void_p, POINTER(MDREvent)]
