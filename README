@@ -1,0 +1,15 @@
+libmdr Python Bindings
+===
+
+Installation
+---
+pip install -e libmdr
+pip install -e libmdr-bt
+pip install -e mdr-cli # optional. the `mdr` command line tool, see `mdr help`
+
+
+Regenerating the C ABI Bindings
+---
+With SonyHeadphonesClient checked out next to this repository:
+
+python tooling/generate_bindings.py [--source path-to-SonyHeadphonesClient]

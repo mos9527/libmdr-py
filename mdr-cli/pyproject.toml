@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mdr-cli"
+version = "0.1.0"
+description = "libmdr CLI Frontend"
+readme = { text = "libmdr CLI Frontend", content-type = "text/plain" }
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = ["libmdr", "libmdr-bt"]
+
+[project.scripts]
+mdr = "mdr.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
