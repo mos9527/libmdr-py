@@ -13,9 +13,13 @@ from ctypes import (
     c_char_p,
     c_int,
     c_int8,
+    c_int16,
     c_int32,
-    c_uint32,
+    c_int64,
     c_uint8,
+    c_uint16,
+    c_uint32,
+    c_uint64,
     c_void_p,
 )
 
@@ -43,6 +47,9 @@ MDRNoiseButtonMode = c_uint32
 MDRSpeechSensitivity = c_uint32
 MDRSpeakTimeout = c_uint32
 MDRListeningMode = c_uint32
+MDRListeningBlocker = c_uint32
+MDRVoiceAssistant = c_uint32
+MDRVoiceAssistantKey = c_uint32
 MDRRoomSize = c_uint32
 MDREqualizerPreset = c_uint32
 MDRDSEEType = c_uint32
@@ -153,6 +160,31 @@ MDRListening._fields_ = [
     ("background_room", MDRRoomSize),
 ]
 
+class MDRListeningStatus(Structure):
+    pass
+
+MDRListeningStatus._fields_ = [
+    ("available", MDRBoolean),
+    ("blockers", MDRListeningBlocker),
+]
+
+class MDRVoiceAssistantSettings(Structure):
+    pass
+
+MDRVoiceAssistantSettings._fields_ = [
+    ("assistant", MDRVoiceAssistant),
+    ("available", MDRBoolean),
+    ("key", MDRVoiceAssistantKey),
+]
+
+class MDRVoiceAssistantOption(Structure):
+    pass
+
+MDRVoiceAssistantOption._fields_ = [
+    ("assistant", MDRVoiceAssistant),
+    ("available", MDRBoolean),
+]
+
 class MDREqualizer(Structure):
     pass
 
@@ -252,7 +284,7 @@ MDRSafeListening._fields_ = [
     ("preview", MDRBoolean),
 ]
 
-MDRPacketCallback = CFUNCTYPE(None, c_void_p, MDRPacketDirection, POINTER(c_uint8), c_int)
+MDRPacketCallback = CFUNCTYPE(None, c_void_p, MDRPacketDirection, c_uint64, POINTER(c_uint8), c_int)
 
 
 def bind(lib: object) -> None:
@@ -274,6 +306,10 @@ def bind(lib: object) -> None:
     lib.mdrConnectionFreeDevicesList.restype = MDRResult
     lib.mdrConnectionGetLastError.argtypes = [POINTER(MDRConnection)]
     lib.mdrConnectionGetLastError.restype = c_char_p
+    lib.mdrDebugRequestCommand.argtypes = [c_void_p, POINTER(c_uint8), c_uint32, c_uint32, MDRBoolean]
+    lib.mdrDebugRequestCommand.restype = MDRResult
+    lib.mdrDebugSetPacketCallback.argtypes = [c_void_p, MDRPacketCallback, c_void_p]
+    lib.mdrDebugSetPacketCallback.restype = None
     lib.mdrHeadphonesCreate.argtypes = [c_uint32, POINTER(MDRConnection), MDRProtocolVersion, POINTER(c_void_p)]
     lib.mdrHeadphonesCreate.restype = MDRResult
     lib.mdrHeadphonesDestroy.argtypes = [c_void_p]
@@ -296,8 +332,6 @@ def bind(lib: object) -> None:
     lib.mdrHeadphonesPoll.restype = MDRResult
     lib.mdrHeadphonesSetTimeout.argtypes = [c_void_p, MDRTimeoutType, c_int]
     lib.mdrHeadphonesSetTimeout.restype = MDRResult
-    lib.mdrHeadphonesSetPacketCallback.argtypes = [c_void_p, MDRPacketCallback, c_void_p]
-    lib.mdrHeadphonesSetPacketCallback.restype = None
     lib.mdrHeadphonesGetFeature.argtypes = [c_void_p, MDRFeature, POINTER(MDRFeatureAvailability)]
     lib.mdrHeadphonesGetFeature.restype = MDRResult
     lib.mdrHeadphonesGetText.argtypes = [c_void_p, MDRText, c_uint32, c_char_p, POINTER(c_uint32)]
@@ -324,6 +358,8 @@ def bind(lib: object) -> None:
     lib.mdrHeadphonesGetListening.restype = MDRResult
     lib.mdrHeadphonesSetListening.argtypes = [c_void_p, POINTER(MDRListening)]
     lib.mdrHeadphonesSetListening.restype = MDRResult
+    lib.mdrHeadphonesGetListeningStatus.argtypes = [c_void_p, MDRListeningMode, POINTER(MDRListeningStatus)]
+    lib.mdrHeadphonesGetListeningStatus.restype = MDRResult
     lib.mdrHeadphonesGetEqualizer.argtypes = [c_void_p, MDRPropertyType, POINTER(MDREqualizer)]
     lib.mdrHeadphonesGetEqualizer.restype = MDRResult
     lib.mdrHeadphonesSetEqualizerPreset.argtypes = [c_void_p, MDREqualizerPreset]
@@ -374,6 +410,12 @@ def bind(lib: object) -> None:
     lib.mdrHeadphonesGetVoiceGuidance.restype = MDRResult
     lib.mdrHeadphonesSetVoiceGuidance.argtypes = [c_void_p, POINTER(MDRVoiceGuidance)]
     lib.mdrHeadphonesSetVoiceGuidance.restype = MDRResult
+    lib.mdrHeadphonesGetVoiceAssistant.argtypes = [c_void_p, MDRPropertyType, POINTER(MDRVoiceAssistantSettings)]
+    lib.mdrHeadphonesGetVoiceAssistant.restype = MDRResult
+    lib.mdrHeadphonesGetVoiceAssistantOptions.argtypes = [c_void_p, POINTER(MDRVoiceAssistantOption), POINTER(c_uint32)]
+    lib.mdrHeadphonesGetVoiceAssistantOptions.restype = MDRResult
+    lib.mdrHeadphonesSetVoiceAssistant.argtypes = [c_void_p, MDRVoiceAssistant]
+    lib.mdrHeadphonesSetVoiceAssistant.restype = MDRResult
     lib.mdrHeadphonesGetConnectionMode.argtypes = [c_void_p, MDRPropertyType, POINTER(MDRConnectionMode)]
     lib.mdrHeadphonesGetConnectionMode.restype = MDRResult
     lib.mdrHeadphonesSetConnectionMode.argtypes = [c_void_p, POINTER(MDRConnectionMode)]

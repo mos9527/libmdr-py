@@ -26,8 +26,12 @@ INTEGER_CTYPES = {
     "int": "c_int",
     "int8_t": "c_int8",
     "uint8_t": "c_uint8",
+    "int16_t": "c_int16",
+    "uint16_t": "c_uint16",
     "int32_t": "c_int32",
     "uint32_t": "c_uint32",
+    "int64_t": "c_int64",
+    "uint64_t": "c_uint64",
     "unsigned char": "c_uint8",
 }
 
@@ -53,9 +57,25 @@ class Function:
     arguments: tuple[str, ...]
 
 
+C_STRING_LITERAL = r'"(?:[^"\\\n]|\\.)*"'
+C_LITERAL_OR_COMMENT = re.compile(
+    r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|/\*.*?\*/|//[^\n]*',
+    flags=re.DOTALL,
+)
+
+
 def strip_comments(source: str) -> str:
-    source = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
-    return re.sub(r"//.*?$", "", source, flags=re.MULTILINE)
+    """Splice C logical lines, then remove comments without damaging literals."""
+    source = re.sub(r"\\\r?\n", "", source)
+
+    def replace(match: re.Match[str]) -> str:
+        token = match.group()
+        if token.startswith(("/*", "//")):
+            # Comments separate tokens; keep line boundaries for anchored parsers.
+            return " " + "\n" * token.count("\n")
+        return token
+
+    return C_LITERAL_OR_COMMENT.sub(replace, source)
 
 
 def split_arguments(arguments: str) -> list[str]:
@@ -108,7 +128,7 @@ def parse_structs(source: str) -> list[Struct]:
             declaration = declaration.strip()
             if not declaration:
                 continue
-            callback = re.fullmatch(r"(.+?)\(\s*\*(\w+)\s*\)\s*\((.*)\)", declaration, re.DOTALL)
+            callback = re.fullmatch(r"(.+?)\(\s*\*\s*(\w+)\s*\)\s*\((.*)\)", declaration, re.DOTALL)
             if callback:
                 args = tuple(argument_type(arg) for arg in split_arguments(callback.group(3)))
                 fields.append(
@@ -128,7 +148,7 @@ def parse_structs(source: str) -> list[Struct]:
 def parse_callbacks(source: str) -> list[Function]:
     callbacks: list[Function] = []
     pattern = re.compile(
-        r"^typedef\s+([^;]+?)\(\s*\*(\w+)\s*\)\s*\((.*?)\)\s*;",
+        r"^[ \t]*typedef\s+([^;{}()]+?)\(\s*\*\s*(\w+)\s*\)\s*\((.*?)\)\s*;",
         flags=re.DOTALL | re.MULTILINE,
     )
     for result, name, arguments in pattern.findall(source):
@@ -145,7 +165,7 @@ def parse_callbacks(source: str) -> list[Function]:
 def parse_functions(source: str) -> list[Function]:
     functions: list[Function] = []
     pattern = re.compile(
-        r"^MDR_API[ \t]+(.+?)\s+(mdr\w+)\s*\((.*?)\)\s*;",
+        r"^[ \t]*MDR_API\b\s+([^;{}()]+?)(?<!\w)(mdr\w+)\s*\((.*?)\)\s*;",
         flags=re.DOTALL | re.MULTILINE,
     )
     for result, name, arguments in pattern.findall(source):
@@ -162,7 +182,7 @@ def parse_functions(source: str) -> list[Function]:
 def parse_integer_aliases(source: str) -> dict[str, str]:
     aliases: dict[str, str] = {}
     for base, name in re.findall(
-        r"typedef\s+(u?int(?:8|32)_t)\s+(MDR\w+)\s*;",
+        r"typedef\s+(u?int(?:8|16|32|64)_t)\s+(MDR\w+)\s*;",
         source,
     ):
         aliases[name] = base
@@ -202,8 +222,6 @@ def ctype_expression(
         expression = INTEGER_CTYPES[base]
     elif base in struct_names:
         expression = base
-    elif base.startswith("MDR"):
-        expression = base
     else:
         raise ValueError(f"unsupported C type: {c_type!r}")
 
@@ -218,15 +236,27 @@ def callback_name(struct_name: str, field_name: str) -> str:
 
 def render_api(headers: list[str]) -> str:
     source = strip_comments("\n".join(headers))
+    if re.search(
+        r"^[ \t]*#[ \t]*pragma[ \t]+(?:pack|ms_struct|scalar_storage_order)\b|\b_Pragma\s*\(",
+        source,
+        flags=re.MULTILINE,
+    ):
+        raise ValueError("ABI layout pragmas require explicit ctypes layout support")
     aliases = parse_integer_aliases(source)
     structs = parse_structs(source)
     callbacks = parse_callbacks(source)
     functions = parse_functions(source)
     struct_names = {struct.name for struct in structs}
     opaque_structs = parse_opaque_structs(source)
+    named_types = struct_names | {callback.name for callback in callbacks}
+    parsed_typedefs = len(aliases) + len(structs) + len(callbacks) + len(opaque_structs)
+    if parsed_typedefs != len(re.findall(r"\btypedef\b", source)):
+        raise ValueError("unsupported or duplicate typedef in ABI headers")
+    if len(functions) != len(re.findall(r"^[ \t]*MDR_API\b", source, flags=re.MULTILINE)):
+        raise ValueError("unsupported MDR_API declaration in ABI headers")
 
     def ct(c_type: str) -> str:
-        return ctype_expression(c_type, aliases, struct_names, opaque_structs)
+        return ctype_expression(c_type, aliases, named_types, opaque_structs)
 
     lines = [
         GENERATED_NOTICE.rstrip(),
@@ -239,9 +269,13 @@ def render_api(headers: list[str]) -> str:
         "    c_char_p,",
         "    c_int,",
         "    c_int8,",
+        "    c_int16,",
         "    c_int32,",
-        "    c_uint32,",
+        "    c_int64,",
         "    c_uint8,",
+        "    c_uint16,",
+        "    c_uint32,",
+        "    c_uint64,",
         "    c_void_p,",
         ")",
         "",
@@ -288,12 +322,14 @@ def render_api(headers: list[str]) -> str:
 
 
 def safe_integer(expression: str, known: dict[str, int] | None = None) -> int:
-    expression = re.sub(r"(?<=\d)[uUlL]+\b", "", expression.strip())
+    expression = re.sub(r"\b(0[xX][0-9a-fA-F]+|\d+)[uUlL]+\b", r"\1", expression.strip())
     tree = ast.parse(expression, mode="eval")
     known = known or {}
     operators = {
         ast.BitOr: lambda left, right: left | right,
         ast.BitAnd: lambda left, right: left & right,
+        ast.BitXor: lambda left, right: left ^ right,
+        ast.Mult: lambda left, right: left * right,
         ast.LShift: lambda left, right: left << right,
         ast.RShift: lambda left, right: left >> right,
         ast.Add: lambda left, right: left + right,
@@ -309,6 +345,14 @@ def safe_integer(expression: str, known: dict[str, int] | None = None) -> int:
             return known[node.id]
         if isinstance(node, ast.BinOp) and type(node.op) in operators:
             return operators[type(node.op)](evaluate(node.left), evaluate(node.right))
+        if isinstance(node, ast.UnaryOp):
+            value = evaluate(node.operand)
+            if isinstance(node.op, ast.UAdd):
+                return value
+            if isinstance(node.op, ast.USub):
+                return -value
+            if isinstance(node.op, ast.Invert):
+                return ~value
         raise ValueError(f"unsupported integer expression: {expression!r}")
 
     return evaluate(tree)
@@ -316,11 +360,11 @@ def safe_integer(expression: str, known: dict[str, int] | None = None) -> int:
 
 def macro_value(expression: str, known: dict[str, int] | None = None) -> int | str | None:
     expression = expression.strip()
-    cast = re.fullmatch(r"\(\([A-Za-z_]\w*\)\s*(.+)\)", expression)
+    if re.fullmatch(rf"(?:{C_STRING_LITERAL}\s*)+", expression):
+        return "".join(ast.literal_eval(lit) for lit in re.findall(C_STRING_LITERAL, expression))
+    cast = re.fullmatch(r"\(\s*\(\s*[A-Za-z_]\w*\s*\)\s*(.+)\)", expression)
     if cast:
         expression = cast.group(1)
-    if expression.startswith('"') and expression.endswith('"'):
-        return ast.literal_eval(expression)
     try:
         return safe_integer(expression, known)
     except (SyntaxError, ValueError):
@@ -328,15 +372,38 @@ def macro_value(expression: str, known: dict[str, int] | None = None) -> int | s
 
 
 def parse_macros(source: str) -> list[tuple[str, int | str]]:
-    macros: list[tuple[str, int | str]] = []
+    source = strip_comments(source)
+    definitions: dict[str, str] = {}
+    pattern = r"^[ \t]*#[ \t]*define[ \t]+(MDR_\w+)\b([^\n]*)$"
+    for name, tail in re.findall(pattern, source, flags=re.MULTILINE):
+        # Export decorations and function-like macros are not Python constants.
+        if name == "MDR_API" or tail.startswith("("):
+            continue
+        expression = tail.strip()
+        if not expression:
+            raise ValueError(f"empty ABI constant: {name}")
+        if name in definitions:
+            raise ValueError(f"duplicate ABI constant: {name}")
+        definitions[name] = expression
+
+    values: dict[str, int | str] = {}
     known: dict[str, int] = {}
-    for name, expression in re.findall(r"^#define[ \t]+(MDR_\w+)[ \t]+(.+)$", source, flags=re.MULTILINE):
-        value = macro_value(expression, known)
-        if value is not None:
-            macros.append((name, value))
-            if isinstance(value, int):
-                known[name] = value
-    return macros
+    pending = dict(definitions)
+    while pending:
+        resolved: list[str] = []
+        for name, expression in pending.items():
+            value = macro_value(expression, known)
+            if value is not None:
+                values[name] = value
+                if isinstance(value, int):
+                    known[name] = value
+                resolved.append(name)
+        if not resolved:
+            details = ", ".join(f"{name}={expression!r}" for name, expression in pending.items())
+            raise ValueError(f"unsupported or unresolved ABI constant(s): {details}")
+        for name in resolved:
+            del pending[name]
+    return [(name, values[name]) for name in definitions]
 
 
 def python_constant_name(c_name: str, *, results: bool = False) -> str:
@@ -356,30 +423,42 @@ def render_constants(source: str, *, results: bool = False, trailer: list[str] |
     return "\n".join(lines)
 
 
-C_STRING_LITERAL = r'"(?:[^"\\\n]|\\.)*"'
-
-
 def parse_i18n_strings(source: str) -> dict[str, str]:
     """``_Def(TextId, "text")`` entries from a client/I18N locale file."""
+    source = strip_comments(source)
     strings: dict[str, str] = {}
-    pattern = re.compile(rf"\b_Def\(\s*(\w+)\s*,\s*((?:{C_STRING_LITERAL}\s*)+)\)")
-    for text_id, literals in pattern.findall(source):
+    pattern = re.compile(rf"\b_Def\s*\(\s*(\w+)\s*,\s*((?:{C_STRING_LITERAL}\s*)+)\)")
+    # Mask literal contents so examples of _Def inside text are not treated as calls.
+    masked = C_LITERAL_OR_COMMENT.sub(lambda match: " " * len(match.group()), source)
+    for call in re.finditer(r"\b_Def\s*\(", masked):
+        match = pattern.match(source, call.start())
+        if match is None:
+            raise ValueError(f"unsupported _Def entry near {source[call.start():call.start() + 100]!r}")
+        text_id, literals = match.groups()
+        if text_id in strings:
+            raise ValueError(f"duplicate _Def entry: {text_id}")
         strings[text_id] = "".join(ast.literal_eval(lit) for lit in re.findall(C_STRING_LITERAL, literals))
     return strings
 
 
 def parse_feature_text_ids(source: str) -> dict[str, str]:
     """``MDR_FEATURE_*`` -> ``i18n::TextId`` from the client's ``kFeatures`` table."""
-    table = re.search(r"\bkFeatures\[\]\s*=\s*\{(.*?)\};", source, flags=re.DOTALL)
+    source = strip_comments(source)
+    table = re.search(r"\bkFeatures\s*\[\s*\]\s*=\s*\{(.*?)\}\s*;", source, flags=re.DOTALL)
     if not table:
         raise ValueError("kFeatures table not found in client source")
-    return {
-        feature: text_id
-        for text_id, feature in re.findall(
-            r"\{\s*i18n::TextId::(\w+)\s*,\s*(MDR_FEATURE_\w+)\s*\}",
-            table.group(1),
-        )
-    }
+    row_pattern = re.compile(
+        r"\{\s*i18n\s*::\s*TextId\s*::\s*(\w+)\s*,\s*(MDR_FEATURE_\w+)\s*,?\s*\}"
+    )
+    body = table.group(1)
+    if row_pattern.sub("", body).strip(" \t\r\n,"):
+        raise ValueError("unsupported row in kFeatures table")
+    text_ids: dict[str, str] = {}
+    for text_id, feature in row_pattern.findall(body):
+        if feature in text_ids:
+            raise ValueError(f"duplicate kFeatures row: {feature}")
+        text_ids[feature] = text_id
+    return text_ids
 
 
 def render_feature_names(headphones: str, client: str, strings_source: str) -> list[str]:

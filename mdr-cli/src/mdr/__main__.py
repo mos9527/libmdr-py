@@ -150,6 +150,24 @@ class Power:
     autooff: Annotated[int, "minutes, 0 = never"]
 
 
+@dataclass
+class Listening:
+    mode: Literal["standard", "background", "cinema", "voiceboost", "leakage"]
+    room: Literal["unknown", "small", "medium", "large"]
+    available: Annotated[bool, RO] = True
+    blockers: Annotated[list[str], RO] = field(default_factory=list)
+    modes: Annotated[list[str], RO] = field(default_factory=list)
+
+
+@dataclass
+class VoiceAssistant:
+    assistant: Literal["none", "recognition", "google", "alexa", "xiaowei", "sony", "other"]
+    available: Annotated[bool, RO] = False
+    key: Annotated[str, RO] = ""
+    options: Annotated[list[str], RO] = field(default_factory=list)
+    unavailable: Annotated[list[str], RO] = field(default_factory=list)
+
+
 # --------------------------------------------------------------------------- #
 # key=value <-> dataclass
 # --------------------------------------------------------------------------- #
@@ -323,6 +341,23 @@ def commit(hp: Headphones, timeout: float) -> None:
         wait(hp, C.EVENT_APPLY_COMPLETE, timeout)
 
 
+def wait_voice_settings(hp: Headphones, timeout: float) -> None:
+    """Wait for the parameter report, not just initialization's final GET ACK.
+
+    Capability/status events also use EVENT_VOICE_ASSISTANT_CHANGED, so waiting
+    for that event alone does not guarantee the selected assistant is cached.
+    """
+    deadline = time.monotonic() + timeout
+    while hp.get_voice_assistant(CURRENT).assistant == C.VOICE_ASSISTANT_UNKNOWN:
+        if time.monotonic() >= deadline:
+            raise MDRError(R.ERROR_TIMEOUT, "timed out waiting for readable voice-assistant settings")
+        event = hp.poll()
+        if event == C.EVENT_ALERT:
+            print(f"device asks: {hp.get_text(C.TEXT_LAST_ALERT)}", file=sys.stderr)
+        if event == C.EVENT_NONE:
+            time.sleep(0.005)
+
+
 @contextmanager
 def connect(opts: Options, init: int) -> Iterator[tuple[Headphones, int]]:
     """Connect, run the requested init and yield ``(headphones, protocol)``."""
@@ -336,6 +371,8 @@ def connect(opts: Options, init: int) -> Iterator[tuple[Headphones, int]]:
                 t0 = time.monotonic()
                 hp.request_init(init)
                 wait(hp, C.EVENT_INITIALIZE_COMPLETE, opts.timeout)
+                if init & C.HEADPHONES_INIT_VOICE_ASSISTANT and hp.feature_available(C.FEATURE_VOICE_ASSISTANT):
+                    wait_voice_settings(hp, opts.timeout)
                 log(opts, f"init 0x{init:05x} in {time.monotonic() - t0:.2f}s")
                 yield hp, protocol
         finally:
@@ -506,6 +543,73 @@ def power_off(hp: Headphones, done: Callable[[], None]) -> None:
         pass  # The link usually drops before the ACK arrives.
 
 
+LISTENING_MODES = {
+    "standard": C.LISTENING_STANDARD,
+    "background": C.LISTENING_BACKGROUND_MUSIC,
+    "cinema": C.LISTENING_CINEMA,
+    "voiceboost": C.LISTENING_VOICE_BOOST,
+    "leakage": C.LISTENING_SOUND_LEAKAGE_REDUCTION,
+}
+LISTENING_FEATURES = {
+    C.LISTENING_BACKGROUND_MUSIC: C.FEATURE_LISTENING_BACKGROUND_MUSIC,
+    C.LISTENING_CINEMA: C.FEATURE_LISTENING_CINEMA,
+    C.LISTENING_VOICE_BOOST: C.FEATURE_LISTENING_VOICE_BOOST,
+    C.LISTENING_SOUND_LEAKAGE_REDUCTION: C.FEATURE_LISTENING_SOUND_LEAKAGE_REDUCTION,
+}
+ROOM_SIZES = {name.lower(): value for value, name in C.ROOM_SIZE_NAMES.items()}
+VOICE_ASSISTANTS = {
+    "none": C.VOICE_ASSISTANT_NONE,
+    "recognition": C.VOICE_ASSISTANT_VOICE_RECOGNITION,
+    "google": C.VOICE_ASSISTANT_GOOGLE_ASSISTANT,
+    "alexa": C.VOICE_ASSISTANT_AMAZON_ALEXA,
+    "xiaowei": C.VOICE_ASSISTANT_TENCENT_XIAOWEI,
+    "sony": C.VOICE_ASSISTANT_SONY_VOICE_CONTROL,
+    "other": C.VOICE_ASSISTANT_OTHER_DEVICE,
+}
+
+
+def read_listening(hp: Headphones, proto: int, view: int) -> Listening:
+    value = hp.get_listening(view)
+    status = hp.get_listening_status(int(value.mode))
+    mode = next((name for name, ident in LISTENING_MODES.items() if ident == value.mode), "unknown")
+    room = C.ROOM_SIZE_NAMES.get(value.background_room, "Unknown").lower()
+    blockers = [name for bit, name in C.LISTENING_BLOCKER_NAMES.items() if bit and status.blockers & bit]
+    modes = [name for name, ident in LISTENING_MODES.items()
+             if ident == C.LISTENING_STANDARD or hp.feature_available(LISTENING_FEATURES[ident])]
+    return Listening(mode, room, bool(status.available), blockers, modes)
+
+
+def write_listening(hp: Headphones, proto: int, old: Listening, new: Listening) -> None:
+    if (old.mode, old.room) == (new.mode, new.room):
+        return
+    value = hp.get_listening(DESIRED)
+    value.mode = LISTENING_MODES[new.mode]
+    value.background_room = ROOM_SIZES[new.room]
+    hp.set_listening(value)
+
+
+def read_voice(hp: Headphones, proto: int, view: int) -> VoiceAssistant:
+    value = hp.get_voice_assistant(view)
+    names = {ident: name for name, ident in VOICE_ASSISTANTS.items()}
+    options = hp.get_voice_assistant_options()
+
+    def label(ident: int) -> str:
+        return names.get(ident, C.VOICE_ASSISTANT_NAMES.get(ident, str(ident)))
+
+    return VoiceAssistant(
+        assistant=label(int(value.assistant)),
+        available=bool(value.available),
+        key=C.VOICE_ASSISTANT_KEY_NAMES.get(value.key, str(value.key)),
+        options=[label(int(option.assistant)) for option in options],
+        unavailable=[label(int(option.assistant)) for option in options if not option.available],
+    )
+
+
+def write_voice(hp: Headphones, proto: int, old: VoiceAssistant, new: VoiceAssistant) -> None:
+    if new.assistant != old.assistant:
+        hp.set_voice_assistant(VOICE_ASSISTANTS[new.assistant])
+
+
 @dataclass
 class Context:
     help: str
@@ -532,6 +636,12 @@ CONTEXTS: dict[str, Context] = {
                         actions={a: playback_action(a) for a in ("play", "pause", "toggle", "next", "prev")}),
     "power": Context("auto power off and shutdown", Power, DISCOVERY | C.HEADPHONES_INIT_POWER,
                      read_power, write_power, actions={"off": power_off}),
+    "listening": Context("listening mode, room size and blockers", Listening,
+                         DISCOVERY | C.HEADPHONES_INIT_LISTENING_MODE,
+                         read_listening, write_listening, feature=C.FEATURE_LISTENING_MODE),
+    "voice": Context("voice assistant and available options", VoiceAssistant,
+                     DISCOVERY | C.HEADPHONES_INIT_VOICE_ASSISTANT,
+                     read_voice, write_voice, feature=C.FEATURE_VOICE_ASSISTANT),
 }
 
 WATCH_EVENTS = {
@@ -541,6 +651,8 @@ WATCH_EVENTS = {
     C.EVENT_EQUALIZER_CHANGED: "eq",
     C.EVENT_PLAYBACK_CHANGED: "playback",
     C.EVENT_POWER_CHANGED: "power",
+    C.EVENT_LISTENING_MODE_CHANGED: "listening",
+    C.EVENT_VOICE_ASSISTANT_CHANGED: "voice",
 }
 
 

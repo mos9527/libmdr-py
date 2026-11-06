@@ -42,7 +42,7 @@ _SUBMODULE_DIR = _PY_ROOT / "cpp"
 # overridden by .gitmodules when present. Upstream has no releases yet, so the
 # sources are pinned to a commit matching the generated bindings.
 _SOURCE_URL = "https://github.com/mos9527/SonyHeadphonesClient.git"
-_SOURCE_COMMIT = "6ae6ff9fc62515cae284c3844a1f8bc64e4b63c0"
+_SOURCE_COMMIT = "2edf09098db27642c89e533bf86c0a6b162f6ad4"
 
 # CMake target -> on-disk base name (OUTPUT_NAME set in the C++ CMakeLists).
 _TARGET_BASENAMES = {

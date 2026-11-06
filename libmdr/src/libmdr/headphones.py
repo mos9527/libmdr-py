@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ctypes import byref, c_int32, c_uint32, c_void_p, create_string_buffer
+from ctypes import byref, c_int32, c_uint8, c_uint32, c_void_p, create_string_buffer
 from typing import TYPE_CHECKING
 
 from . import _api, _dll, constants, result
@@ -146,19 +146,63 @@ class Headphones:
         self,
         callback: Callable[[int, bytes], None] | None,
     ) -> None:
+        """Observe packets as ``callback(direction, frame)``; pass None to clear.
+
+        Preserves the pre-ABI-9 Python interface. For packet IDs, use
+        :meth:`set_debug_packet_callback`. The two methods replace the same hook.
+        """
+        if callback is None:
+            self.set_debug_packet_callback(None)
+        else:
+            self.set_debug_packet_callback(lambda direction, packet_id, frame: callback(direction, frame))
+
+    def set_debug_packet_callback(
+        self,
+        callback: Callable[[int, int, bytes], None] | None,
+    ) -> None:
+        """Observe ``callback(direction, packet_id, frame)`` synchronously.
+
+        Do not reenter polling or close this instance from the callback. Frame
+        bytes are copied and remain valid after the callback returns.
+        """
         lib = _dll.lib()
         if callback is None:
-            lib.mdrHeadphonesSetPacketCallback(self.handle, _api.MDRPacketCallback(), None)
+            lib.mdrDebugSetPacketCallback(self.handle, _api.MDRPacketCallback(), None)
             self._packet_callback = None
             return
 
-        def _trampoline(user_data, direction, frame, frame_size):  # noqa: ANN001
+        def _trampoline(user_data, direction, packet_id, frame, frame_size):  # noqa: ANN001
             raw = bytes(frame[:frame_size]) if frame and frame_size > 0 else b""
-            callback(int(direction), raw)
+            callback(int(direction), int(packet_id), raw)
 
         c_callback = _api.MDRPacketCallback(_trampoline)
+        lib.mdrDebugSetPacketCallback(self.handle, c_callback, None)
         self._packet_callback = c_callback  # keep alive
-        lib.mdrHeadphonesSetPacketCallback(self.handle, c_callback, None)
+
+    def debug_request_command(
+        self,
+        payload: bytes,
+        data_type: int = 12,
+        *,
+        await_ack: bool = True,
+    ) -> int:
+        """Schedule raw command bytes without requiring normal initialization.
+
+        ``data_type`` is 12 (DATA_MDR) or 14 (DATA_MDR_NO2). Payloads may be empty
+        but cannot exceed 2048 bytes. ACK waiting is non-blocking; continue polling.
+        """
+        if len(payload) > 2048:
+            raise ValueError("debug payload cannot exceed 2048 bytes")
+        if data_type not in (12, 14):
+            raise ValueError("data_type must be 12 (DATA_MDR) or 14 (DATA_MDR_NO2)")
+        buffer = (c_uint8 * len(payload)).from_buffer_copy(payload)
+        return result.check(
+            _dll.lib().mdrDebugRequestCommand(
+                self.handle, buffer, len(payload), data_type,
+                constants.TRUE if await_ack else constants.FALSE,
+            ),
+            allow_inprogress=True,
+        )
 
     def feature_availability(self, feature: int) -> int:
         availability = c_uint32(0)
@@ -265,7 +309,20 @@ class Headphones:
         return value
 
     def set_listening(self, value: _api.MDRListening) -> None:
+        """Stage a listening mode; unavailable modes raise ERROR_NOT_SUPPORTED.
+
+        A mode that becomes unavailable before commit is not sent.
+        """
         result.check(_dll.lib().mdrHeadphonesSetListening(self.handle, byref(value)))
+
+    def get_listening_status(self, mode: int) -> _api.MDRListeningStatus:
+        """Cached availability and LISTENING_BLOCKER_* flags for one mode.
+
+        Unreported modes read available. Updated on EVENT_LISTENING_MODE_CHANGED.
+        """
+        value = _api.MDRListeningStatus()
+        result.check(_dll.lib().mdrHeadphonesGetListeningStatus(self.handle, mode, byref(value)))
+        return value
 
     def get_equalizer(self, view: int = constants.PROPERTY_CURRENT) -> _api.MDREqualizer:
         value = _api.MDREqualizer()
@@ -505,6 +562,38 @@ class Headphones:
 
     def set_voice_guidance(self, value: _api.MDRVoiceGuidance) -> None:
         result.check(_dll.lib().mdrHeadphonesSetVoiceGuidance(self.handle, byref(value)))
+
+    def get_voice_assistant(
+        self, view: int = constants.PROPERTY_CURRENT
+    ) -> _api.MDRVoiceAssistantSettings:
+        """Cached assistant selection, availability and key type.
+
+        Requires FEATURE_VOICE_ASSISTANT. Selection is VOICE_ASSISTANT_UNKNOWN
+        before the parameter report arrives; that may be after initialization's
+        completion event. Continue polling for EVENT_VOICE_ASSISTANT_CHANGED.
+        """
+        value = _api.MDRVoiceAssistantSettings()
+        result.check(_dll.lib().mdrHeadphonesGetVoiceAssistant(self.handle, view, byref(value)))
+        return value
+
+    def get_voice_assistant_options(self) -> list[_api.MDRVoiceAssistantOption]:
+        """Advertised assistant options in device order; empty before a report."""
+        lib = _dll.lib()
+        count = c_uint32(0)
+        result.check(lib.mdrHeadphonesGetVoiceAssistantOptions(self.handle, None, byref(count)))
+        if count.value == 0:
+            return []
+        array = (_api.MDRVoiceAssistantOption * count.value)()
+        result.check(lib.mdrHeadphonesGetVoiceAssistantOptions(self.handle, array, byref(count)))
+        return [array[i] for i in range(count.value)]
+
+    def set_voice_assistant(self, assistant: int) -> None:
+        """Stage an advertised, available option for request_commit.
+
+        Raises ERROR_NOT_SUPPORTED if the device refuses it. An option that
+        becomes unavailable before commit is not sent.
+        """
+        result.check(_dll.lib().mdrHeadphonesSetVoiceAssistant(self.handle, assistant))
 
     def get_connection_mode(
         self, view: int = constants.PROPERTY_CURRENT
