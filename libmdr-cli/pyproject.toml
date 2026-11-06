@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "libmdr-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "libmdr CLI Frontend"
-readme = { text = "libmdr CLI Frontend. Provides the `mdr` command, see `mdr help`.", content-type = "text/plain" }
+readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["libmdr", "libmdr-bt"]
+dependencies = ["libmdr==0.1.1", "libmdr-bt==0.1.1"]
 
 [project.urls]
 Source = "https://github.com/mos9527/libmdr-py"

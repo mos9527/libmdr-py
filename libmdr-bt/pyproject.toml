@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "libmdr-bt"
-version = "0.1.0"
-description = "Python binding for libmdr-bt (Sony headphones platform connection backend)"
-readme = { text = "ctypes bindings for libmdr-bt (mdr-bt-shared).", content-type = "text/plain" }
+version = "0.1.1"
+description = "Python binding for libmdr-bt"
+readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["libmdr"]
+dependencies = ["libmdr==0.1.1"]
 
 [project.urls]
 Source = "https://github.com/mos9527/libmdr-py"
@@ -23,7 +23,7 @@ libmdr_bt = ["_native/*"]
 
 # See libmdr/pyproject.toml: wheels are py3-none-<platform>, built once per platform.
 [tool.cibuildwheel]
-skip = ["*-musllinux_*", "cp31[1-9]*-manylinux_armv7l"]  # armv7l runs under QEMU: test once
+skip = ["*-musllinux_*"]
 build-verbosity = 1
 test-command = "python -c \"import libmdr_bt, libmdr_bt._dll as d; print(d.load())\""
 manylinux-armv7l-image = "manylinux_2_35"

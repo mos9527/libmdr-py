@@ -24,7 +24,8 @@ jobs:
         include:
           - { name: manylinux x86_64,  runner: ubuntu-24.04,     archs: x86_64 }
           - { name: manylinux aarch64, runner: ubuntu-24.04-arm, archs: aarch64 }
-          - { name: manylinux armv7l,  runner: ubuntu-24.04,     archs: armv7l, qemu: arm }
+          # Runs natively in AArch32 mode, no emulation.
+          - { name: manylinux armv7l,  runner: ubuntu-24.04-arm, archs: armv7l }
           - { name: windows AMD64,     runner: windows-2025,     archs: AMD64 }
           - { name: windows ARM64,     runner: windows-11-arm,   archs: ARM64 }
           # Apple Silicon runner; x86_64 is cross-built (ARCHFLAGS -> CMAKE_OSX_ARCHITECTURES)
@@ -34,11 +35,6 @@ jobs:
       CIBW_ARCHS: ${{ matrix.archs }}
     steps:
       - uses: actions/checkout@v7
-
-      - uses: docker/setup-qemu-action@v4
-        if: matrix.qemu
-        with:
-          platforms: ${{ matrix.qemu }}
 
       - name: Build libmdr
         uses: pypa/cibuildwheel@v4.3.5
@@ -73,16 +69,23 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Check tag matches package versions
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Check package versions, pins and tag agree
         shell: python
         run: |
           import os, tomllib
-          tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+          projects = {}
           for pkg in ("libmdr", "libmdr-bt", "libmdr-cli"):
               with open(f"{pkg}/pyproject.toml", "rb") as f:
-                  version = tomllib.load(f)["project"]["version"]
-              assert version == tag, f"{pkg} is {version}, but the tag is v{tag}"
+                  projects[pkg] = tomllib.load(f)["project"]
+          version = projects["libmdr"]["version"]
+          for pkg, project in projects.items():
+              assert project["version"] == version, f"{pkg} is {project['version']}, libmdr is {version}"
+              extras = project.get("optional-dependencies", {}).values()
+              for req in project.get("dependencies", []) + sum(extras, []):
+                  assert req.endswith(f"=={version}"), f"{pkg}: {req} is not pinned to {version}"
+          if os.environ["GITHUB_REF_TYPE"] == "tag":
+              tag = os.environ["GITHUB_REF_NAME"]
+              assert tag == f"v{version}", f"tag {tag} does not match version {version}"
 
       - name: Build
         run: |
@@ -90,6 +93,11 @@ jobs:
           python -m build --sdist libmdr --outdir dist
           python -m build --sdist libmdr-bt --outdir dist
           python -m build libmdr-cli --outdir dist
+
+      - name: Check PyPI metadata
+        run: |
+          python -m pip install twine
+          python -m twine check --strict dist/*
 
       - uses: actions/upload-artifact@v7
         with:

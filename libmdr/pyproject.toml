@@ -4,17 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "libmdr"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python bindings for the mdr-shared C ABI"
-readme = { text = "ctypes bindings for libmdr (mdr-shared).", content-type = "text/plain" }
+readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 
 [project.optional-dependencies]
 dev = []
-bt = ["libmdr-bt"]
-cli = ["libmdr-cli"]
+bt = ["libmdr-bt==0.1.1"]
+cli = ["libmdr-cli==0.1.1"]
 
 [project.urls]
 Source = "https://github.com/mos9527/libmdr-py"
@@ -29,7 +29,7 @@ libmdr = ["_native/*"]
 # loaded via ctypes, so it is built once per platform and cibuildwheel reuses
 # that wheel to run the tests on every other selected interpreter.
 [tool.cibuildwheel]
-skip = ["*-musllinux_*", "cp31[1-9]*-manylinux_armv7l"]  # armv7l runs under QEMU: test once
+skip = ["*-musllinux_*"]
 build-verbosity = 1
 test-command = "python -c \"import libmdr, libmdr._dll as d; print(d.load())\""
 # Ubuntu 22.04 based; manylinux_2_31 (Ubuntu 20.04) defaults to GCC 9, without <span>.
