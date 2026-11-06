@@ -27,7 +27,7 @@ import sys
 import time
 from pathlib import Path
 
-from setuptools import setup
+from setuptools import Distribution, setup
 from setuptools.command.bdist_wheel import bdist_wheel as _bdist_wheel
 from setuptools.command.build_py import build_py as _build_py
 from setuptools.command.editable_wheel import editable_wheel as _editable_wheel
@@ -234,6 +234,17 @@ class build_py(_build_py):
         super().run()
 
 
+class BinaryDistribution(Distribution):
+    """Mark the distribution as platform specific.
+
+    There are no ext_modules (the native library is package data), so without
+    this the wheel is pure and installs into purelib, which auditwheel rejects.
+    """
+
+    def has_ext_modules(self) -> bool:
+        return True
+
+
 class bdist_wheel(_bdist_wheel):
     """Tag wheels ``py3-none-<platform>``.
 
@@ -241,10 +252,6 @@ class bdist_wheel(_bdist_wheel):
     dependency, so a single wheel per platform serves every Python 3
     interpreter (CPython of any version, free-threaded builds, PyPy).
     """
-
-    def finalize_options(self) -> None:
-        super().finalize_options()
-        self.root_is_pure = False
 
     def get_tag(self) -> tuple[str, str, str]:
         _, _, plat = super().get_tag()
@@ -266,6 +273,7 @@ class sdist(_sdist):
 
 
 setup(
+    distclass=BinaryDistribution,
     cmdclass={
         "bdist_wheel": bdist_wheel,
         "build_py": build_py,
