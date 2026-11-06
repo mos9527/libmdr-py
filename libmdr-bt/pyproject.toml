@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "libmdr-bt"
 version = "0.1.1"
-description = "Python binding for libmdr-bt"
+description = "Python binding for libmdr-bt (libmdr Bluetooth Backends)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
