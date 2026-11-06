@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -12,8 +12,39 @@ license = "MIT"
 license-files = ["LICENSE"]
 dependencies = ["libmdr"]
 
+[project.urls]
+Source = "https://github.com/mos9527/libmdr-py"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 libmdr_bt = ["_native/*"]
+
+# See libmdr/pyproject.toml: wheels are py3-none-<platform>, built once per platform.
+[tool.cibuildwheel]
+skip = ["*-musllinux_*", "cp31[1-9]*-manylinux_armv7l"]  # armv7l runs under QEMU: test once
+build-verbosity = 1
+test-command = "python -c \"import libmdr_bt, libmdr_bt._dll as d; print(d.load())\""
+
+[tool.cibuildwheel.linux]
+# The BlueZ backend talks to the system bluetoothd over D-Bus.
+# manylinux_2_28 is AlmaLinux 8 (bluez-libs-devel lives in PowerTools);
+# manylinux_2_31 (armv7l) is Ubuntu 20.04.
+before-all = """
+if command -v dnf >/dev/null 2>&1; then
+  dnf install -y --enablerepo=powertools dbus-devel bluez-libs-devel || dnf install -y --enablerepo=crb dbus-devel bluez-libs-devel;
+else
+  apt-get update && apt-get install -y libdbus-1-dev libbluetooth-dev;
+fi
+"""
+# libdbus-1 / libbluetooth must match the host's dbus-daemon / bluetoothd (and
+# libbluetooth is GPL), so they are used from the system instead of vendored.
+repair-wheel-command = "auditwheel repair --exclude libdbus-1.so.3 --exclude libbluetooth.so.3 -w {dest_dir} {wheel}"
+
+[tool.cibuildwheel.macos]
+environment = { MACOSX_DEPLOYMENT_TARGET = "12.0" }
+
+[tool.cibuildwheel.windows]
+# No Python extension modules; mdr-bt-shared.dll links the CRT statically.
+repair-wheel-command = ""

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import configparser
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -27,6 +28,7 @@ import time
 from pathlib import Path
 
 from setuptools import setup
+from setuptools.command.bdist_wheel import bdist_wheel as _bdist_wheel
 from setuptools.command.build_py import build_py as _build_py
 from setuptools.command.editable_wheel import editable_wheel as _editable_wheel
 from setuptools.command.sdist import sdist as _sdist
@@ -131,7 +133,22 @@ def _ensure_source() -> Path:
     return clone_dir
 
 
-def _configure(build_dir: Path | None = None, *, extra_args: list[str] | None = None) -> Path:
+def _config() -> str:
+    return os.environ.get("MDR_CMAKE_CONFIG", "MinSizeRel")
+
+
+def _platform_args() -> list[str]:
+    args: list[str] = []
+    if sys.platform == "darwin":
+        # PEP 517 frontends / cibuildwheel request the target architecture(s)
+        # via ARCHFLAGS (e.g. "-arch x86_64"), which CMake does not read.
+        archs = re.findall(r"-arch\s+(\S+)", os.environ.get("ARCHFLAGS", ""))
+        if archs:
+            args.append("-DCMAKE_OSX_ARCHITECTURES=" + ";".join(archs))
+    return args
+
+
+def _configure(build_dir: Path | None = None, *, config: str | None = None, extra_args: list[str] | None = None) -> Path:
     build_dir = Path(build_dir or os.environ.get("MDR_PYTHON_BUILD_DIR", DEFAULT_BUILD_DIR))
     # Always start from a clean build dir so a stale CMake cache or an
     # interrupted dependency fetch (e.g. fmt via FetchContent) cannot poison
@@ -140,6 +157,8 @@ def _configure(build_dir: Path | None = None, *, extra_args: list[str] | None = 
     build_dir.mkdir(parents=True, exist_ok=True)
     cmd = [
         _cmake(), "-S", str(_ensure_source()), "-B", str(build_dir),
+        # Single-config generators (Makefiles/Ninja) ignore `--build --config`.
+        f"-DCMAKE_BUILD_TYPE={config or _config()}",
         "-DMDR_BUILD_TESTING=OFF",
         "-DMDR_BUILD_CLIENT=OFF",
         "-DMDR_BUILD_BT=OFF",
@@ -147,6 +166,7 @@ def _configure(build_dir: Path | None = None, *, extra_args: list[str] | None = 
         "-DMDR_CLIENT_DEBUGGER=OFF",
         "-DMDR_ENABLE_LOG=OFF",
     ]
+    cmd.extend(_platform_args())
     if extra_args:
         cmd.extend(extra_args)
     gen = os.environ.get("MDR_CMAKE_GENERATOR")
@@ -157,8 +177,8 @@ def _configure(build_dir: Path | None = None, *, extra_args: list[str] | None = 
 
 
 def _build(targets: list[str], build_dir: Path | None = None, *, config: str | None = None, extra_args: list[str] | None = None) -> Path:
-    build_dir = _configure(build_dir, extra_args=extra_args)
-    config = config or os.environ.get("MDR_CMAKE_CONFIG", "MinSizeRel")
+    config = config or _config()
+    build_dir = _configure(build_dir, config=config, extra_args=extra_args)
     cmd = [_cmake(), "--build", str(build_dir), "--config", config, "--parallel"]
     for target in targets:
         cmd.extend(["--target", target])
@@ -214,6 +234,23 @@ class build_py(_build_py):
         super().run()
 
 
+class bdist_wheel(_bdist_wheel):
+    """Tag wheels ``py3-none-<platform>``.
+
+    The native library is loaded through ctypes and has no CPython ABI
+    dependency, so a single wheel per platform serves every Python 3
+    interpreter (CPython of any version, free-threaded builds, PyPy).
+    """
+
+    def finalize_options(self) -> None:
+        super().finalize_options()
+        self.root_is_pure = False
+
+    def get_tag(self) -> tuple[str, str, str]:
+        _, _, plat = super().get_tag()
+        return "py3", "none", plat
+
+
 class editable_wheel(_editable_wheel):
     def run(self) -> None:
         # build_py.run() (called internally by super()) already handles
@@ -230,6 +267,7 @@ class sdist(_sdist):
 
 setup(
     cmdclass={
+        "bdist_wheel": bdist_wheel,
         "build_py": build_py,
         "editable_wheel": editable_wheel,
         "sdist": sdist,

@@ -1,15 +1,19 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mdr-cli"
+name = "libmdr-cli"
 version = "0.1.0"
 description = "libmdr CLI Frontend"
-readme = { text = "libmdr CLI Frontend", content-type = "text/plain" }
+readme = { text = "libmdr CLI Frontend. Provides the `mdr` command, see `mdr help`.", content-type = "text/plain" }
 requires-python = ">=3.10"
 license = "MIT"
+license-files = ["LICENSE"]
 dependencies = ["libmdr", "libmdr-bt"]
+
+[project.urls]
+Source = "https://github.com/mos9527/libmdr-py"
 
 [project.scripts]
 mdr = "mdr.__main__:main"

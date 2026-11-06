@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -14,9 +14,28 @@ license-files = ["LICENSE"]
 [project.optional-dependencies]
 dev = []
 bt = ["libmdr-bt"]
+cli = ["libmdr-cli"]
+
+[project.urls]
+Source = "https://github.com/mos9527/libmdr-py"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 libmdr = ["_native/*"]
+
+# Wheels are tagged py3-none-<platform> (see setup.py): the native library is
+# loaded via ctypes, so it is built once per platform and cibuildwheel reuses
+# that wheel to run the tests on every other selected interpreter.
+[tool.cibuildwheel]
+skip = ["*-musllinux_*", "cp31[1-9]*-manylinux_armv7l"]  # armv7l runs under QEMU: test once
+build-verbosity = 1
+test-command = "python -c \"import libmdr, libmdr._dll as d; print(d.load())\""
+
+[tool.cibuildwheel.macos]
+environment = { MACOSX_DEPLOYMENT_TARGET = "12.0" }
+
+[tool.cibuildwheel.windows]
+# No Python extension modules; mdr-shared.dll links the CRT statically.
+repair-wheel-command = ""
