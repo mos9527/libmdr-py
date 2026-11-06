@@ -32,7 +32,8 @@ libmdr = ["_native/*"]
 skip = ["*-musllinux_*", "cp31[1-9]*-manylinux_armv7l"]  # armv7l runs under QEMU: test once
 build-verbosity = 1
 test-command = "python -c \"import libmdr, libmdr._dll as d; print(d.load())\""
-# Ubuntu 22.04 based; manylinux_2_31 (Ubuntu 20.04) has no C++20 capable GCC.
+# Ubuntu 22.04 based; manylinux_2_31 (Ubuntu 20.04) defaults to GCC 9, without <span>.
+# The resulting wheels still only need glibc 2.17: auditwheel tags them accordingly.
 manylinux-armv7l-image = "manylinux_2_35"
 
 [tool.cibuildwheel.linux]

@@ -10,13 +10,17 @@ pip install libmdr[cli]   # + libmdr-cli, the `mdr` command line tool. see `mdr 
 The extras are shorthands for the standalone packages, i.e. `pip install libmdr-bt`
 and `pip install libmdr-cli` work just as well.
 
-Prebuilt wheels work with any Python >= 3.10 (CPython, free-threaded CPython or PyPy) on:
+Prebuilt wheels are not tied to a Python version, and install on any Python >= 3.10 on:
 - Windows   x86-64, arm64
 - macOS 12+ x86-64, arm64
-- Linux     x86-64, arm64 (glibc >= 2.28); armv7 (glibc >= 2.31)
+- Linux     x86-64, arm64, armv7 (glibc >= 2.17)
 
-On Linux, libmdr-bt uses the system's libdbus-1 and libbluetooth (BlueZ).
-Elsewhere pip builds from the sdist, which needs CMake >= 3.31, git and a C++20 compiler.
+CI loads the libraries on CPython 3.10 - 3.15, including free-threaded 3.14t and 3.15t
+(armv7: 3.10 only). Other interpreters, such as PyPy, are untested.
+
+On Linux, libmdr-bt needs the system's libdbus-1 and libbluetooth (BlueZ) at runtime.
+Elsewhere (e.g. musl) pip builds from the sdist, which needs CMake >= 3.31, git and a C++20
+compiler, plus the libdbus-1 and libbluetooth headers for libmdr-bt.
 
 Development
 ---
